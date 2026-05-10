@@ -105,4 +105,13 @@ class AppConstants {
   // ── Single Instance ────────────────────────────────────────────────────────
   /// Mutex name used to prevent multiple app instances.
   static const String singleInstanceMutex = 'InvisibleAIAssistantMutex';
+
+  // ── Windows auto-updater (WinSparkle / auto_updater) ───────────────────────
+  /// HTTPS URL to `appcast.xml` (RSS + Sparkle enclosure). Host this on GitHub
+  /// (raw), Pages, or your CDN — must match DSA signatures on each release.
+  static const String windowsAppcastUrl =
+      'https://raw.githubusercontent.com/Vikalp-cyber/invisible-ai/main/docs/appcast-win.xml';
+
+  /// Seconds between background checks (WinSparkle minimum is 3600).
+  static const int windowsUpdateCheckIntervalSeconds = 86400;
 }

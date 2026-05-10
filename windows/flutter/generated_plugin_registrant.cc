@@ -6,6 +6,7 @@
 
 #include "generated_plugin_registrant.h"
 
+#include <auto_updater_windows/auto_updater_windows_plugin_c_api.h>
 #include <bitsdojo_window_windows/bitsdojo_window_plugin.h>
 #include <flutter_secure_storage_windows/flutter_secure_storage_windows_plugin.h>
 #include <hotkey_manager_windows/hotkey_manager_windows_plugin_c_api.h>
@@ -17,6 +18,8 @@
 #include <window_protection/window_protection_plugin_c_api.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
+  AutoUpdaterWindowsPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("AutoUpdaterWindowsPluginCApi"));
   BitsdojoWindowPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("BitsdojoWindowPlugin"));
   FlutterSecureStorageWindowsPluginRegisterWithRegistrar(

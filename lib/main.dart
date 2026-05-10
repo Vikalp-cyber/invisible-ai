@@ -7,6 +7,7 @@ import 'package:bitsdojo_window/bitsdojo_window.dart';
 
 import 'app.dart';
 import 'core/constants/app_constants.dart';
+import 'services/app_update_service.dart';
 import 'services/preference_service.dart';
 import 'services/secure_storage_service.dart';
 import 'services/hotkey_service.dart';
@@ -43,6 +44,8 @@ void main() async {
     debugPrint('Another instance is already running. Exiting.');
     exit(0);
   }
+
+  await AppUpdateService.instance.initializeIfSupported();
 
   // ── Initialize Preferences & Storage ─────────────────────────────────────
   // Must be initialized before WindowService reads persisted state.

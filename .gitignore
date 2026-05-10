@@ -31,6 +31,7 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/dist/
 /coverage/
 
 # Symbolication related
@@ -46,4 +47,7 @@ app.*.map.json
 
 # Large third-party binaries (fetch in CI or locally)
 third_party/*.zip
+
+# WinSparkle / auto_updater signing (never commit the private key)
+dsa_priv.pem
 

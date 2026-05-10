@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../../services/app_update_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../overlay/domain/models/overlay_layout_state.dart';
 import '../../../overlay/domain/models/overlay_mode.dart';
@@ -702,6 +705,22 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
           false,
           (val) {},
         ),
+        if (Platform.isWindows) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => AppUpdateService.presentManualCheck(context),
+              icon: const Icon(Icons.system_update_alt_rounded, size: 18),
+              label: const Text('Check for updates'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.glassBorder),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

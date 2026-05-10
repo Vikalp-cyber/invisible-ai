@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  auto_updater_windows
   bitsdojo_window_windows
   flutter_secure_storage_windows
   hotkey_manager_windows

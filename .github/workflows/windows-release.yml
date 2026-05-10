@@ -1,15 +1,22 @@
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   WINDOWS_CODESIGN_PFX_BASE64  — Base64-encoded .pfx (PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx")))
+#   WINDOWS_CODESIGN_PFX_PASSWORD — Password for the PFX file
+#
+# Optional: use a GitHub Environments "production" with protection rules and store secrets there.
+
 name: windows-release
 
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*"
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,36 +30,64 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build Windows release
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build Windows (release)
         run: flutter build windows --release
 
-      - name: Package build output
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path dist -Force | Out-Null
-          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath dist/invisible_ai_assistant_windows.zip -Force
-
-      - name: Build installer (Inno Setup)
+      - name: Install Inno Setup
         shell: pwsh
         run: |
           choco install innosetup -y
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\invisible_ai_assistant.iss
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-release
-          path: |
-            dist/invisible_ai_assistant_windows.zip
-            installer/output/*.exe
+      - name: Compile installer (.iss)
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}" -replace '^v',''
+          if ([string]::IsNullOrWhiteSpace($ver)) { throw "Could not derive version from ref" }
+          New-Item -ItemType Directory -Path "${{ github.workspace }}\dist" -Force | Out-Null
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$ver" "${{ github.workspace }}\installer\invisible_ai_assistant.iss"
 
-      - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Sign installer (signtool + PFX)
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installerDir = Join-Path "${{ github.workspace }}" "dist"
+          $exe = Get-ChildItem -Path $installerDir -Filter "*.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No .exe found in $installerDir" }
+
+          if ([string]::IsNullOrWhiteSpace($env:PFX_BASE64)) {
+            throw "Missing secret WINDOWS_CODESIGN_PFX_BASE64"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:PFX_PASSWORD)) {
+            throw "Missing secret WINDOWS_CODESIGN_PFX_PASSWORD"
+          }
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          $bytes = [Convert]::FromBase64String($env:PFX_BASE64)
+          [IO.File]::WriteAllBytes($pfxPath, $bytes)
+
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw "signtool.exe not found under Windows Kits" }
+
+          & $signtool sign /f $pfxPath /p $env:PFX_PASSWORD /tr "http://timestamp.digicert.com" /td SHA256 /fd SHA256 $exe.FullName
+          if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
+
+          Remove-Item -LiteralPath $pfxPath -Force
+
+      - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/invisible_ai_assistant_windows.zip
-            installer/output/*.exe
+          files: dist/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
