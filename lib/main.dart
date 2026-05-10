@@ -14,6 +14,7 @@ import 'services/hotkey_service.dart';
 import 'services/tray_service.dart';
 import 'services/overlay_protection_manager.dart';
 import 'features/assistant/presentation/providers/assistant_provider.dart';
+import 'core/providers/common_providers.dart';
 import 'features/overlay/presentation/providers/overlay_provider.dart';
 
 /// ── Application Entry Point ────────────────────────────────────────────────
