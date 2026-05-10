@@ -59,6 +59,7 @@ DesktopOAuthConfig _buildConfig({
     refreshPath: '/api/auth/refresh',
     mePath: '/api/auth/me',
     logoutPath: '',
+    groqClientConfigPath: '/api/groq/client-config',
     accessTokenParam: 'accessToken',
     refreshTokenParam: 'refreshToken',
     userParam: 'user',

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../../domain/models/chat_message.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
+import 'groq_exceptions.dart';
 
 class GroqProvider implements AIProvider {
   @override
@@ -20,6 +21,7 @@ class GroqProvider implements AIProvider {
     String prompt, {
     String? apiKey,
     Uint8List? imageBytes,
+    String? providerModelId,
   }) async* {
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('API key is required for Groq.');
@@ -49,8 +51,12 @@ class GroqProvider implements AIProvider {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $apiKey',
     });
+    final model =
+        (providerModelId != null && providerModelId.isNotEmpty)
+            ? providerModelId
+            : 'llama-3.3-70b-versatile';
     request.body = jsonEncode({
-      'model': 'llama-3.3-70b-versatile', // Fast, powerful model on Groq
+      'model': model,
       'messages': messages,
       'stream': true,
       'stream_options': {'include_usage': true}, // Required to get usage in stream
@@ -60,8 +66,19 @@ class GroqProvider implements AIProvider {
       final response = await _client!.send(request);
 
       if (response.statusCode != 200) {
-        final errorResponse = await response.stream.bytesToString();
-        throw Exception('Groq Error (${response.statusCode}): $errorResponse');
+        final errorBody = await response.stream.bytesToString();
+        final code = response.statusCode;
+
+        // Throw typed exceptions so the fallback layer can decide to retry.
+        if (code == 429) {
+          throw GroqRateLimitException(code, errorBody);
+        } else if (code == 401 || code == 403) {
+          throw GroqAuthException(code, errorBody);
+        } else if (code >= 500) {
+          throw GroqServerException(code, errorBody);
+        } else {
+          throw GroqClientException(code, errorBody);
+        }
       }
 
       await for (final chunk in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
@@ -92,7 +109,8 @@ class GroqProvider implements AIProvider {
               );
             }
           } catch (e) {
-            // Ignore parse errors for partial chunks
+            // Re-throw Groq API exceptions; ignore JSON parse errors for partial chunks.
+            if (e is GroqApiException) rethrow;
           }
         }
       }

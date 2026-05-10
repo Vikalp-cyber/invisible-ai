@@ -20,6 +20,7 @@ class AnthropicProvider implements AIProvider {
     String prompt, {
     String? apiKey,
     Uint8List? imageBytes,
+    String? providerModelId,
   }) async* {
     if (apiKey == null || apiKey.isEmpty) {
       throw Exception('API key is required for Anthropic Claude.');

@@ -55,6 +55,7 @@ abstract class AIProvider {
     String prompt, {
     String? apiKey,
     Uint8List? imageBytes,
+    String? providerModelId,
   });
 
   /// Cancels an ongoing generation.

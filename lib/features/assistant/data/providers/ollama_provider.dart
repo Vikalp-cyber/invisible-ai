@@ -20,6 +20,7 @@ class OllamaProvider implements AIProvider {
     String prompt, {
     String? apiKey,
     Uint8List? imageBytes,
+    String? providerModelId,
   }) async* {
     _client = http.Client();
 

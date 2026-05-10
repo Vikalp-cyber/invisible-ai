@@ -4,6 +4,9 @@ class DesktopOAuthConfig {
   final String refreshPath;
   final String mePath;
   final String logoutPath;
+  /// Authenticated (user access token) endpoint returning resolved Groq key + models.
+  /// Not the admin `/api/admin/groq-keys` API — that must never ship in the client.
+  final String groqClientConfigPath;
   final String accessTokenParam;
   final String refreshTokenParam;
   final String userParam;
@@ -19,6 +22,7 @@ class DesktopOAuthConfig {
     required this.refreshPath,
     required this.mePath,
     required this.logoutPath,
+    required this.groqClientConfigPath,
     required this.accessTokenParam,
     required this.refreshTokenParam,
     required this.userParam,
@@ -48,6 +52,10 @@ class DesktopOAuthConfig {
         defaultValue: '/api/auth/me',
       ),
       logoutPath: String.fromEnvironment('AUTH_LOGOUT_PATH', defaultValue: ''),
+      groqClientConfigPath: String.fromEnvironment(
+        'GROQ_CLIENT_CONFIG_PATH',
+        defaultValue: '/api/groq/client-config',
+      ),
       accessTokenParam: String.fromEnvironment(
         'AUTH_ACCESS_TOKEN_PARAM',
         defaultValue: 'accessToken',

@@ -53,6 +53,9 @@ dependency_overrides:
     path: .tmp_record_windows
   flutter_secure_storage_windows:
     path: third_party/flutter_secure_storage_windows
+  # Marshals WinSparkle callbacks to the Flutter UI thread (fixes platform channel warning/crash).
+  auto_updater_windows:
+    path: third_party/auto_updater_windows
 
 flutter:
   uses-material-design: true

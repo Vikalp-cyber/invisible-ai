@@ -13,7 +13,6 @@ import 'services/secure_storage_service.dart';
 import 'services/hotkey_service.dart';
 import 'services/tray_service.dart';
 import 'services/overlay_protection_manager.dart';
-import 'features/assistant/domain/repositories/ai_provider_interface.dart';
 import 'features/assistant/presentation/providers/assistant_provider.dart';
 import 'features/overlay/presentation/providers/overlay_provider.dart';
 
@@ -53,15 +52,6 @@ void main() async {
   await preferenceService.init();
 
   final secureStorageService = SecureStorageService();
-  // Pre-seed API keys for immediate use
-  await secureStorageService.saveApiKey(
-    AIProviderType.gemini,
-    'AIzaSyCy1Capt5QlPwv8Z676ilwi0h8BzbYgZXM',
-  );
-  await secureStorageService.saveApiKey(
-    AIProviderType.groq,
-    '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',
-  );
 
   // ── Initialize Window Manager ───────────────────────────────────────────
   await windowManager.ensureInitialized();

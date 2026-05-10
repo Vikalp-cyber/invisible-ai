@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../services/app_update_service.dart';
+import '../../data/providers/groq_config_providers.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../overlay/domain/models/overlay_layout_state.dart';
 import '../../../overlay/domain/models/overlay_mode.dart';
@@ -413,6 +414,9 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
   Future<void> _saveKeys() async {
     final storage = ref.read(secureStorageServiceProvider);
     for (final type in AIProviderType.values) {
+      if (type == AIProviderType.groq) {
+        continue;
+      }
       if (_controllers[type]!.text.trim().isNotEmpty) {
         await storage.saveApiKey(type, _controllers[type]!.text.trim());
       }
@@ -642,43 +646,139 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
           ),
         ),
         const SizedBox(height: 12),
-        ...AIProviderType.values.map((type) {
-          if (type == AIProviderType.ollama) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  type.displayName,
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _controllers[type],
-                  obscureText: true,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: 'Enter API Key',
-                    hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-                    filled: true,
-                    fillColor: AppColors.surface.withValues(alpha: 0.3),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: AppColors.glassBorder, width: 1),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+        ...AIProviderType.values.expand((type) {
+          if (type == AIProviderType.ollama) {
+            return <Widget>[const SizedBox.shrink()];
+          }
+          if (type == AIProviderType.groq) {
+            return <Widget>[_buildGroqAccountSection()];
+          }
+          return <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    type.displayName,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _controllers[type],
+                    obscureText: true,
+                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Enter API Key',
+                      hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                      filled: true,
+                      fillColor: AppColors.surface.withValues(alpha: 0.3),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.glassBorder, width: 1),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppColors.primary, width: 1.2),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          );
+          ];
         }),
       ],
+    );
+  }
+
+  Widget _buildGroqAccountSection() {
+    final async = ref.watch(groqClientConfigProvider);
+    final prefs = ref.read(preferenceServiceProvider);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AIProviderType.groq.displayName,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+          ),
+          const SizedBox(height: 6),
+          async.when(
+            data: (config) {
+              if (config == null) {
+                return const Text(
+                  'Sign in; Groq is provisioned by the server. The API key is not stored on this device.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                );
+              }
+              final options = config.models;
+              if (options.isEmpty) {
+                return const Text(
+                  'The server returned no Groq models.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                );
+              }
+              final saved = prefs.getString(AppConstants.keyGroqModelId);
+              final validSaved =
+                  saved.isNotEmpty && options.any((m) => m.id == saved);
+              var selected = validSaved
+                  ? saved
+                  : (config.resolvedDefaultModelId ?? options.first.id);
+              if (!options.any((m) => m.id == selected)) {
+                selected = options.first.id;
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Model (API key is never shown or saved here)',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.glassBorder, width: 0.5),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selected,
+                        isExpanded: true,
+                        dropdownColor: AppColors.backgroundMedium,
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                        items: options
+                            .map(
+                              (m) => DropdownMenuItem(
+                                value: m.id,
+                                child: Text(m.label ?? m.id),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (id) {
+                          if (id == null) return;
+                          prefs.setString(AppConstants.keyGroqModelId, id);
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+            loading: () => const LinearProgressIndicator(minHeight: 2),
+            error: (e, _) => Text(
+              'Could not load Groq settings: $e',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

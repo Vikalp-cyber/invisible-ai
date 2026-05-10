@@ -12,6 +12,8 @@ import '../../../../services/virtual_audio_cable_service.dart';
 import '../../../../services/interview_audio_copilot_service.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
 import '../../data/ai_repository_impl.dart';
+import '../../data/providers/groq_config_providers.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/models/chat_message.dart';
 import '../../domain/models/audio_input_device.dart';
 import '../../../../services/screen_capture_service.dart';
@@ -135,7 +137,8 @@ final secureStorageServiceProvider = Provider<SecureStorageService>((ref) {
 /// Singleton provider for the AIRepository.
 final aiRepositoryProvider = Provider<AIRepository>((ref) {
   final secureStorage = ref.watch(secureStorageServiceProvider);
-  return AIRepository(secureStorage);
+  final prefs = ref.watch(preferenceServiceProvider);
+  return AIRepository(secureStorage, prefs);
 });
 
 /// Singleton provider for the ScreenCaptureService.
@@ -186,11 +189,12 @@ final trayServiceProvider = Provider<TrayService>((ref) {
 ///
 /// Uses Riverpod 3.x [Notifier] API (replaces the legacy StateNotifier).
 class AssistantNotifier extends Notifier<AssistantState> {
-  late final WindowService _windowService;
-  late final AIRepository _aiRepository;
-  late final ScreenCaptureService _screenCaptureService;
-  late final VirtualAudioCableService _virtualAudioCableService;
-  late final InterviewAudioCopilotService _interviewAudioCopilotService;
+  // Must not be `late final`: [build] runs again when e.g. [groqClientConfigProvider] resolves.
+  late WindowService _windowService;
+  late AIRepository _aiRepository;
+  late ScreenCaptureService _screenCaptureService;
+  late VirtualAudioCableService _virtualAudioCableService;
+  late InterviewAudioCopilotService _interviewAudioCopilotService;
 
   @override
   AssistantState build() {
@@ -202,6 +206,23 @@ class AssistantNotifier extends Notifier<AssistantState> {
     _interviewAudioCopilotService = ref.watch(
       interviewAudioCopilotServiceProvider,
     );
+
+    ref.listen(authProvider, (prev, next) {
+      if (!next.isAuthenticated) {
+        _aiRepository.clearGroqRuntimeConfig();
+        ref.invalidate(groqClientConfigProvider);
+      }
+    });
+
+    ref.listen(groqClientConfigProvider, (prev, next) {
+      next.whenData((config) {
+        if (config != null) {
+          _aiRepository.applyGroqRuntimeConfig(config);
+        }
+      });
+    });
+
+    ref.watch(groqClientConfigProvider);
 
     // Wire up visibility change callback from WindowService → state sync.
     _windowService.onVisibilityChanged = () {

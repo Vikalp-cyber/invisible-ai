@@ -76,6 +76,9 @@ class AppConstants {
   static const String keyOverlayDockEdge = 'overlay_dock_edge';
   static const String keyOverlayOpacity = 'overlay_opacity';
 
+  /// Persisted Groq model id only (never the API key).
+  static const String keyGroqModelId = 'groq_model_id';
+
   // ── AI Mock Delay ──────────────────────────────────────────────────────────
   /// Simulated AI thinking time range.
   static const Duration mockMinDelay = Duration(milliseconds: 800);
