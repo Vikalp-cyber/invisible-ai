@@ -4,10 +4,12 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   bitsdojo_window_linux
+  flutter_secure_storage_linux
   hotkey_manager_linux
   record_linux
   screen_retriever_linux
   tray_manager
+  url_launcher_linux
   window_manager
 )
 

@@ -15,7 +15,7 @@ class AnthropicProvider implements AIProvider {
   http.Client? _client;
 
   @override
-  Stream<String> generateStream(
+  Stream<StreamResponse> generateStream(
     List<ChatMessage> history,
     String prompt, {
     String? apiKey,
@@ -81,15 +81,16 @@ class AnthropicProvider implements AIProvider {
 
       await for (final chunk in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
         if (chunk.trim().isEmpty) continue;
+        if (chunk.startsWith('event:')) continue;
         if (chunk.startsWith('data: ')) {
           final dataStr = chunk.substring(6);
           try {
             final json = jsonDecode(dataStr);
-            if (json['type'] == 'content_block_delta' && json['delta']['type'] == 'text_delta') {
-              yield json['delta']['text'] as String;
+            if (json['type'] == 'content_block_delta') {
+              yield StreamResponse(delta: json['delta']['text'] as String);
             }
           } catch (e) {
-            // Ignore parse errors
+            // Ignore parse errors for partial chunks
           }
         }
       }

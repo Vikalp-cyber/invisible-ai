@@ -12,7 +12,8 @@ class QuestionDetectionService {
       return null;
     }
 
-    final looksLikeQuestion = normalized.endsWith('?') ||
+    final looksLikeQuestion =
+        normalized.endsWith('?') ||
         _questionPatterns.any((pattern) => pattern.hasMatch(normalized));
     if (!looksLikeQuestion) {
       return null;
@@ -29,13 +30,25 @@ class QuestionDetectionService {
 
     _recent[normalized] = DateTime.now();
     _gc();
-    return DetectedQuestion(text: _cleanupQuestion(transcript), confidence: score);
+    return DetectedQuestion(
+      text: _cleanupQuestion(transcript),
+      confidence: score,
+    );
   }
 
   static final List<RegExp> _questionPatterns = <RegExp>[
-    RegExp(r'^(explain|describe|tell me|what is|what are)\b', caseSensitive: false),
-    RegExp(r'\b(difference between|how would you|why do we|when would you)\b', caseSensitive: false),
-    RegExp(r'\b(implement|optimize|design|architecture|dependency injection)\b', caseSensitive: false),
+    RegExp(
+      r'^(explain|describe|tell me|what is|what are)\b',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'\b(difference between|how would you|why do we|when would you)\b',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'\b(implement|optimize|design|architecture|dependency injection)\b',
+      caseSensitive: false,
+    ),
   ];
 
   String _normalize(String value) {

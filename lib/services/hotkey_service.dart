@@ -24,10 +24,7 @@ class HotkeyService {
   /// Registered hotkeys for cleanup.
   final List<HotKey> _registeredHotkeys = [];
 
-  HotkeyService({
-    this.onToggleOverlay,
-    this.onNewChat,
-  });
+  HotkeyService({this.onToggleOverlay, this.onNewChat});
 
   /// ── Initialize & Register All Hotkeys ────────────────────────────────────
   /// Must be called once at app startup after WidgetsFlutterBinding is

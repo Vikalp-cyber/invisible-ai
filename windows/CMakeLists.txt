@@ -55,6 +55,12 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# Prefer a vendored Firebase C++ SDK to avoid flaky network downloads during CMake configure.
+set(LOCAL_FIREBASE_CPP_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/firebase_cpp_sdk_windows")
+if(EXISTS "${LOCAL_FIREBASE_CPP_SDK_DIR}/CMakeLists.txt" AND EXISTS "${LOCAL_FIREBASE_CPP_SDK_DIR}/include/firebase/version.h")
+  set(ENV{FIREBASE_CPP_SDK_DIR} "${LOCAL_FIREBASE_CPP_SDK_DIR}")
+  message(STATUS "Using local Firebase C++ SDK from ${LOCAL_FIREBASE_CPP_SDK_DIR}")
+endif()
 include(flutter/generated_plugins.cmake)
 
 
@@ -65,7 +71,9 @@ include(flutter/generated_plugins.cmake)
 set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
 # Make the "install" step default, as it's required to run.
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+set(STALE_PROGRAM_FILES_PREFIX "C:/Program Files/${BINARY_NAME}")
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT OR
+   CMAKE_INSTALL_PREFIX STREQUAL STALE_PROGRAM_FILES_PREFIX)
   set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
 endif()
 

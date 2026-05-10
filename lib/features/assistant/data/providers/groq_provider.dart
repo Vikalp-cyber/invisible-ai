@@ -15,7 +15,7 @@ class GroqProvider implements AIProvider {
   http.Client? _client;
 
   @override
-  Stream<String> generateStream(
+  Stream<StreamResponse> generateStream(
     List<ChatMessage> history,
     String prompt, {
     String? apiKey,
@@ -53,6 +53,7 @@ class GroqProvider implements AIProvider {
       'model': 'llama-3.3-70b-versatile', // Fast, powerful model on Groq
       'messages': messages,
       'stream': true,
+      'stream_options': {'include_usage': true}, // Required to get usage in stream
     });
 
     try {
@@ -70,9 +71,25 @@ class GroqProvider implements AIProvider {
           final dataStr = chunk.substring(6);
           try {
             final json = jsonDecode(dataStr);
-            final delta = json['choices'][0]['delta'];
-            if (delta.containsKey('content')) {
-              yield delta['content'] as String;
+
+            // Handle content delta
+            if (json['choices'] != null && json['choices'].isNotEmpty) {
+              final delta = json['choices'][0]['delta'];
+              if (delta.containsKey('content')) {
+                yield StreamResponse(delta: delta['content'] as String);
+              }
+            }
+
+            // Handle usage (usually in the last chunk or a separate chunk if stream_options is set)
+            if (json.containsKey('usage') && json['usage'] != null) {
+              final usageJson = json['usage'];
+              yield StreamResponse(
+                usage: ChatMessageUsage(
+                  promptTokens: usageJson['prompt_tokens'] ?? 0,
+                  completionTokens: usageJson['completion_tokens'] ?? 0,
+                  totalTokens: usageJson['total_tokens'] ?? 0,
+                ),
+              );
             }
           } catch (e) {
             // Ignore parse errors for partial chunks
@@ -83,6 +100,7 @@ class GroqProvider implements AIProvider {
       _client?.close();
       _client = null;
     }
+
   }
 
   @override

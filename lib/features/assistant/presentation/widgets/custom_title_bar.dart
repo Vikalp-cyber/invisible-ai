@@ -35,10 +35,7 @@ class CustomTitleBar extends ConsumerWidget {
           gradient: AppColors.titleBarGradient,
           // Bottom separator line.
           border: Border(
-            bottom: BorderSide(
-              color: AppColors.glassBorder,
-              width: 0.5,
-            ),
+            bottom: BorderSide(color: AppColors.glassBorder, width: 0.5),
           ),
         ),
         child: Row(
@@ -57,23 +54,24 @@ class CustomTitleBar extends ConsumerWidget {
                       const SizedBox(width: 10),
 
                       // App title.
-                      Text(
-                        AppStrings.appTitle,
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.5,
-                                ),
+                      Flexible(
+                        child: Text(
+                          AppStrings.appTitle,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                        ),
                       ),
                       const SizedBox(width: 8),
 
                       // Active status dot.
                       _buildStatusDot(),
 
+                      // Only show hotkey hint if there's enough space.
                       const Spacer(),
-
-                      // Hotkey hint badge.
                       _buildHotkeyHint(context),
                     ],
                   ),
@@ -104,32 +102,30 @@ class CustomTitleBar extends ConsumerWidget {
   /// AI brain icon with a subtle animated cyan glow.
   Widget _buildAppIcon() {
     return Container(
-      width: 28,
-      height: 28,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.secondary],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            blurRadius: 12,
-            spreadRadius: 1,
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.secondary],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.3),
+                blurRadius: 12,
+                spreadRadius: 1,
+              ),
+            ],
           ),
-        ],
-      ),
-      child: const Icon(
-        Icons.psychology_rounded,
-        color: AppColors.textOnPrimary,
-        size: 18,
-      ),
-    )
-        .animate(
-          onPlay: (controller) => controller.repeat(reverse: true),
+          child: const Icon(
+            Icons.psychology_rounded,
+            color: AppColors.textOnPrimary,
+            size: 18,
+          ),
         )
+        .animate(onPlay: (controller) => controller.repeat(reverse: true))
         .shimmer(
           duration: 3.seconds,
           color: AppColors.primary.withValues(alpha: 0.15),
@@ -139,23 +135,21 @@ class CustomTitleBar extends ConsumerWidget {
   /// Green pulsing dot indicating active status.
   Widget _buildStatusDot() {
     return Container(
-      width: 7,
-      height: 7,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.success,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.success.withValues(alpha: 0.5),
-            blurRadius: 6,
-            spreadRadius: 1,
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.success,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.success.withValues(alpha: 0.5),
+                blurRadius: 6,
+                spreadRadius: 1,
+              ),
+            ],
           ),
-        ],
-      ),
-    )
-        .animate(
-          onPlay: (controller) => controller.repeat(reverse: true),
         )
+        .animate(onPlay: (controller) => controller.repeat(reverse: true))
         .scaleXY(
           begin: 0.8,
           end: 1.0,
@@ -171,18 +165,15 @@ class CustomTitleBar extends ConsumerWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(4),
         color: AppColors.glassWhite,
-        border: Border.all(
-          color: AppColors.glassBorder,
-          width: 0.5,
-        ),
+        border: Border.all(color: AppColors.glassBorder, width: 0.5),
       ),
       child: Text(
         AppConstants.defaultToggleHotkeyDisplay,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontSize: 9,
-              color: AppColors.textMuted,
-              letterSpacing: 0.3,
-            ),
+          fontSize: 9,
+          color: AppColors.textMuted,
+          letterSpacing: 0.3,
+        ),
       ),
     );
   }
@@ -190,8 +181,7 @@ class CustomTitleBar extends ConsumerWidget {
   /// Always-on-top pin toggle button with active/inactive styling.
   Widget _buildPinButton(bool isAlwaysOnTop, AssistantNotifier notifier) {
     return Tooltip(
-      message:
-          isAlwaysOnTop ? AppStrings.unpinTooltip : AppStrings.pinTooltip,
+      message: isAlwaysOnTop ? AppStrings.unpinTooltip : AppStrings.pinTooltip,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -202,13 +192,9 @@ class CustomTitleBar extends ConsumerWidget {
             height: 34,
             alignment: Alignment.center,
             child: Icon(
-              isAlwaysOnTop
-                  ? Icons.push_pin_rounded
-                  : Icons.push_pin_outlined,
+              isAlwaysOnTop ? Icons.push_pin_rounded : Icons.push_pin_outlined,
               size: 16,
-              color: isAlwaysOnTop
-                  ? AppColors.primary
-                  : AppColors.textMuted,
+              color: isAlwaysOnTop ? AppColors.primary : AppColors.textMuted,
             ),
           ),
         ),

@@ -93,10 +93,7 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
       decoration: const BoxDecoration(
         // Top separator line.
         border: Border(
-          top: BorderSide(
-            color: AppColors.glassBorder,
-            width: 0.5,
-          ),
+          top: BorderSide(color: AppColors.glassBorder, width: 0.5),
         ),
       ),
       child: Row(
@@ -127,7 +124,9 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
                           child: IconButton(
                             icon: const Icon(Icons.cancel, size: 18),
                             color: AppColors.textSecondary,
-                            onPressed: () => ref.read(assistantProvider.notifier).clearSelectedImage(),
+                            onPressed: () => ref
+                                .read(assistantProvider.notifier)
+                                .clearSelectedImage(),
                           ),
                         ),
                       ],
@@ -143,23 +142,57 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
                       _sendMessage();
                     }
                   },
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    maxLines: 4,
-                    minLines: 1,
-                    enabled: !isTyping,
-                    textInputAction: TextInputAction.newline,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontSize: 13.5,
+                  child: AnimatedContainer(
+                    duration: 300.ms,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: _focusNode.hasFocus
+                          ? [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.1),
+                                blurRadius: 12,
+                                spreadRadius: 2,
+                              )
+                            ]
+                          : [],
+                    ),
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      maxLines: 4,
+                      minLines: 1,
+                      enabled: !isTyping,
+                      onChanged: (_) => setState(() {}), // Trigger rebuild for focus/text state
+                      textInputAction: TextInputAction.newline,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(fontSize: 13.5),
+                      decoration: InputDecoration(
+                        hintText: isTyping
+                            ? 'Waiting for response...'
+                            : AppStrings.inputPlaceholder,
+                        filled: true,
+                        fillColor: _focusNode.hasFocus
+                            ? AppColors.glassWhiteHover
+                            : AppColors.glassWhite,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
-                    decoration: InputDecoration(
-                      hintText: isTyping
-                          ? 'Waiting for response...'
-                          : AppStrings.inputPlaceholder,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: AppColors.glassBorder,
+                            width: 1,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                            width: 1.2,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -168,7 +201,7 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
             ),
           ),
 
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
 
           // ── Send Button ────────────────────────────────────────────────────
           _buildSendButton(isTyping, selectedImage != null),
@@ -181,36 +214,56 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
   Widget _buildSendButton(bool isTyping, bool hasImage) {
     final isActive = _hasText || hasImage || isTyping;
 
-    return GestureDetector(
-      onTap: () {
-        if (isTyping) {
-          ref.read(assistantProvider.notifier).stopGeneration();
-        } else if (isActive) {
-          _sendMessage();
-        }
-      },
-      child: AnimatedContainer(
-        duration: AppConstants.fastAnimation,
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: isTyping 
-              ? null // No gradient for stop
-              : (isActive ? AppColors.primaryGradient : null),
-          color: isTyping
-              ? AppColors.error.withValues(alpha: 0.8)
-              : (isActive ? null : AppColors.surface.withValues(alpha: 0.5)),
-          boxShadow: isActive && !isTyping ? AppColors.glowShadow : null,
-        ),
-        child: Icon(
-          isTyping ? Icons.stop_rounded : Icons.arrow_upward_rounded,
-          size: 20,
-          color: isActive ? AppColors.textOnPrimary : AppColors.textMuted,
-        ),
-      )
-          .animate(target: isActive ? 1 : 0)
-          .scaleXY(begin: 0.9, end: 1.0, duration: 200.ms),
+    return MouseRegion(
+      cursor: isActive ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: () {
+          if (isTyping) {
+            ref.read(assistantProvider.notifier).stopGeneration();
+          } else if (isActive) {
+            _sendMessage();
+          }
+        },
+        child: AnimatedContainer(
+          duration: AppConstants.fastAnimation,
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: isTyping
+                ? null // No gradient for stop
+                : (isActive ? AppColors.primaryGradient : null),
+            color: isTyping
+                ? AppColors.error.withValues(alpha: 0.9)
+                : (isActive
+                    ? null
+                    : AppColors.surface.withValues(alpha: 0.5)),
+            boxShadow: isActive && !isTyping
+                ? [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 2),
+                    )
+                  ]
+                : [],
+            border: Border.all(
+              color: isActive && !isTyping
+                  ? AppColors.primary.withValues(alpha: 0.5)
+                  : AppColors.glassBorder,
+              width: 0.5,
+            ),
+          ),
+          child: Icon(
+            isTyping ? Icons.stop_rounded : Icons.arrow_upward_rounded,
+            size: 22,
+            color: isActive ? AppColors.textOnPrimary : AppColors.textMuted,
+          ),
+        )
+            .animate(target: isActive ? 1 : 0)
+            .scaleXY(begin:0.85, end: 1.0, duration: 250.ms, curve: Curves.easeOutBack),
+      ),
     );
   }
 }
+

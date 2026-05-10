@@ -11,7 +11,7 @@ import 'providers/groq_provider.dart';
 
 class AIRepository {
   final SecureStorageService _secureStorage;
-  
+
   final Map<AIProviderType, AIProvider> _providers = {
     AIProviderType.gemini: GeminiProvider(),
     AIProviderType.openai: OpenAIProvider(),
@@ -33,7 +33,7 @@ class AIRepository {
   }
 
   /// Generates a streaming response using the currently selected provider.
-  Stream<String> generateStream(
+  Stream<StreamResponse> generateStream(
     List<ChatMessage> history,
     String prompt, {
     Uint8List? imageBytes,
@@ -44,7 +44,9 @@ class AIRepository {
     if (provider.requiresApiKey) {
       apiKey = await _secureStorage.getApiKey(provider.type);
       if (apiKey == null || apiKey.isEmpty) {
-        throw Exception('API key not found for ${provider.type.displayName}. Please configure it in Settings.');
+        throw Exception(
+          'API key not found for ${provider.type.displayName}. Please configure it in Settings.',
+        );
       }
     }
 
@@ -62,6 +64,7 @@ $prompt
       imageBytes: imageBytes,
     );
   }
+
 
   /// Cancels the ongoing generation.
   void stopGeneration() {

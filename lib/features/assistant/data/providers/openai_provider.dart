@@ -15,7 +15,7 @@ class OpenAIProvider implements AIProvider {
   http.Client? _client;
 
   @override
-  Stream<String> generateStream(
+  Stream<StreamResponse> generateStream(
     List<ChatMessage> history,
     String prompt, {
     String? apiKey,
@@ -82,7 +82,7 @@ class OpenAIProvider implements AIProvider {
             final json = jsonDecode(dataStr);
             final delta = json['choices'][0]['delta'];
             if (delta.containsKey('content')) {
-              yield delta['content'] as String;
+              yield StreamResponse(delta: delta['content'] as String);
             }
           } catch (e) {
             // Ignore parse errors for partial chunks

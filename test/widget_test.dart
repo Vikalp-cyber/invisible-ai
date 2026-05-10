@@ -8,17 +8,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:invisible_ai_assistant/app.dart';
+import 'package:invisible_ai_assistant/features/auth/presentation/providers/auth_provider.dart';
+
+class _TestAuthNotifier extends AuthNotifier {
+  @override
+  AuthState build() => const AuthState(isLoading: false);
+}
 
 void main() {
-  testWidgets('App widget builds without errors', (WidgetTester tester) async {
-    // Build the app wrapped in ProviderScope (required for Riverpod).
+  testWidgets('App widget builds the sign-in shell', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
-      const ProviderScope(
+      ProviderScope(
+        overrides: [authProvider.overrideWith(_TestAuthNotifier.new)],
         child: InvisibleAIApp(),
       ),
     );
 
-    // Verify the app title is rendered in the custom title bar.
-    expect(find.text('Invisible AI'), findsOneWidget);
+    expect(find.text('Invisible AI Assistant'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
   });
 }

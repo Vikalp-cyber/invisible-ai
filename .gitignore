@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Large third-party binaries (fetch in CI or locally)
+third_party/*.zip
+

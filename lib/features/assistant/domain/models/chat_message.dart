@@ -14,6 +14,23 @@ enum MessageRole {
   system,
 }
 
+/// ── Message Usage ──────────────────────────────────────────────────────────
+/// Stores token consumption metadata for a message.
+class ChatMessageUsage {
+  final int promptTokens;
+  final int completionTokens;
+  final int totalTokens;
+
+  ChatMessageUsage({
+    required this.promptTokens,
+    required this.completionTokens,
+    required this.totalTokens,
+  });
+
+  @override
+  String toString() => 'Prompt: $promptTokens, Completion: $completionTokens, Total: $totalTokens';
+}
+
 /// ── Chat Message Model ─────────────────────────────────────────────────────
 /// Immutable data class representing a single message in the conversation.
 /// Uses a UUID for unique identification and stores metadata like timestamps.
@@ -39,6 +56,9 @@ class ChatMessage {
   /// Optional image data attached to this message (for Vision).
   final Uint8List? imageData;
 
+  /// Optional token usage metadata.
+  final ChatMessageUsage? usage;
+
   ChatMessage({
     String? id,
     required this.role,
@@ -47,6 +67,7 @@ class ChatMessage {
     this.isStreaming = false,
     this.isError = false,
     this.imageData,
+    this.usage,
   })  : id = id ?? const Uuid().v4(),
         timestamp = timestamp ?? DateTime.now();
 
@@ -56,6 +77,7 @@ class ChatMessage {
     bool? isStreaming,
     bool? isError,
     Uint8List? imageData,
+    ChatMessageUsage? usage,
   }) {
     return ChatMessage(
       id: id,
@@ -65,25 +87,32 @@ class ChatMessage {
       isStreaming: isStreaming ?? this.isStreaming,
       isError: isError ?? this.isError,
       imageData: imageData ?? this.imageData,
+      usage: usage ?? this.usage,
     );
   }
 
   /// Creates a user message with the given [content] and optional [imageData].
   factory ChatMessage.user(String content, {Uint8List? imageData}) {
     return ChatMessage(
-      role: MessageRole.user, 
+      role: MessageRole.user,
       content: content,
       imageData: imageData,
     );
   }
 
   /// Creates an assistant message with the given [content].
-  factory ChatMessage.assistant(String content, {bool isStreaming = false, bool isError = false}) {
+  factory ChatMessage.assistant(
+    String content, {
+    bool isStreaming = false,
+    bool isError = false,
+    ChatMessageUsage? usage,
+  }) {
     return ChatMessage(
       role: MessageRole.assistant,
       content: content,
       isStreaming: isStreaming,
       isError: isError,
+      usage: usage,
     );
   }
 
@@ -106,5 +135,7 @@ class ChatMessage {
   }
 
   @override
-  String toString() => 'ChatMessage($role: "${content.substring(0, content.length.clamp(0, 50))}...")';
+  String toString() =>
+      'ChatMessage($role: "${content.substring(0, content.length.clamp(0, 50))}...")';
 }
+

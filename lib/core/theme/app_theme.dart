@@ -78,42 +78,27 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: BorderSide(
-            color: AppColors.glassBorder,
-            width: 1,
-          ),
+          borderSide: BorderSide(color: AppColors.glassBorder, width: 1),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: BorderSide(
-            color: AppColors.glassBorder,
-            width: 1,
-          ),
+          borderSide: BorderSide(color: AppColors.glassBorder, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: const BorderSide(
-            color: AppColors.primary,
-            width: 1.5,
-          ),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
       ),
 
       // ── Icon Theme ───────────────────────────────────────────────────────
-      iconTheme: const IconThemeData(
-        color: AppColors.textSecondary,
-        size: 20,
-      ),
+      iconTheme: const IconThemeData(color: AppColors.textSecondary, size: 20),
 
       // ── Tooltip Theme ────────────────────────────────────────────────────
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: AppColors.glassBorder,
-            width: 1,
-          ),
+          border: Border.all(color: AppColors.glassBorder, width: 1),
         ),
         textStyle: textTheme.bodySmall?.copyWith(
           color: AppColors.textPrimary,

@@ -16,6 +16,8 @@ import '../../domain/models/chat_message.dart';
 import '../../domain/models/audio_input_device.dart';
 import '../../../../services/screen_capture_service.dart';
 import '../../../../core/constants/app_strings.dart';
+import '../../../usage/presentation/providers/usage_provider.dart';
+import '../../../usage/domain/models/usage_exception.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── State Class ─────────────────────────────────────────────────────────────
@@ -85,7 +87,8 @@ class AssistantState {
           isInterviewCopilotActive ?? this.isInterviewCopilotActive,
       transcriptPreview: transcriptPreview ?? this.transcriptPreview,
       audioDevices: audioDevices ?? this.audioDevices,
-      selectedAudioDeviceId: selectedAudioDeviceId ?? this.selectedAudioDeviceId,
+      selectedAudioDeviceId:
+          selectedAudioDeviceId ?? this.selectedAudioDeviceId,
     );
   }
 
@@ -141,17 +144,20 @@ final screenCaptureServiceProvider = Provider<ScreenCaptureService>((ref) {
 });
 
 /// Singleton provider for virtual audio cable setup helpers.
-final virtualAudioCableServiceProvider = Provider<VirtualAudioCableService>((ref) {
+final virtualAudioCableServiceProvider = Provider<VirtualAudioCableService>((
+  ref,
+) {
   return VirtualAudioCableService();
 });
 
-final interviewAudioCopilotServiceProvider = Provider<InterviewAudioCopilotService>((ref) {
-  final service = InterviewAudioCopilotService();
-  ref.onDispose(() {
-    service.dispose();
-  });
-  return service;
-});
+final interviewAudioCopilotServiceProvider =
+    Provider<InterviewAudioCopilotService>((ref) {
+      final service = InterviewAudioCopilotService();
+      ref.onDispose(() {
+        service.dispose();
+      });
+      return service;
+    });
 
 /// Singleton provider for the WindowService.
 /// Depends on PreferenceService for state persistence.
@@ -193,7 +199,9 @@ class AssistantNotifier extends Notifier<AssistantState> {
     _aiRepository = ref.watch(aiRepositoryProvider);
     _screenCaptureService = ref.watch(screenCaptureServiceProvider);
     _virtualAudioCableService = ref.watch(virtualAudioCableServiceProvider);
-    _interviewAudioCopilotService = ref.watch(interviewAudioCopilotServiceProvider);
+    _interviewAudioCopilotService = ref.watch(
+      interviewAudioCopilotServiceProvider,
+    );
 
     // Wire up visibility change callback from WindowService → state sync.
     _windowService.onVisibilityChanged = () {
@@ -204,9 +212,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
     return AssistantState(
       isAlwaysOnTop: _windowService.isAlwaysOnTop,
       isOverlayVisible: _windowService.isVisible,
-      messages: [
-        ChatMessage.assistant(AppStrings.welcomeMessage),
-      ],
+      messages: [ChatMessage.assistant(AppStrings.welcomeMessage)],
     );
   }
 
@@ -214,9 +220,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   /// Called by the WindowService callback when visibility changes externally
   /// (e.g., from tray click or hotkey).
   void _syncVisibility() {
-    state = state.copyWith(
-      isOverlayVisible: _windowService.isVisible,
-    );
+    state = state.copyWith(isOverlayVisible: _windowService.isVisible);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -242,20 +246,14 @@ class AssistantNotifier extends Notifier<AssistantState> {
     } else {
       await _windowService.bringToFront();
     }
-    state = state.copyWith(
-      isOverlayVisible: true,
-      shouldFocusInput: true,
-    );
+    state = state.copyWith(isOverlayVisible: true, shouldFocusInput: true);
   }
 
   /// ── Hide Overlay ──────────────────────────────────────────────────────────
   /// Hides the overlay to the system tray.
   Future<void> hideOverlay() async {
     await _windowService.hideWindow();
-    state = state.copyWith(
-      isOverlayVisible: false,
-      shouldFocusInput: false,
-    );
+    state = state.copyWith(isOverlayVisible: false, shouldFocusInput: false);
   }
 
   /// ── Acknowledge Focus Request ─────────────────────────────────────────────
@@ -302,7 +300,8 @@ class AssistantNotifier extends Notifier<AssistantState> {
       return a.isVirtualCable ? -1 : 1;
     });
     final vbDevice = devices.where((d) => d.isVirtualCable).toList();
-    final selected = state.selectedAudioDeviceId ??
+    final selected =
+        state.selectedAudioDeviceId ??
         (vbDevice.isNotEmpty ? vbDevice.first.id : null) ??
         (devices.isNotEmpty ? devices.first.id : null);
     state = state.copyWith(
@@ -386,7 +385,10 @@ class AssistantNotifier extends Notifier<AssistantState> {
     state = state.copyWith(
       isInterviewCopilotActive: false,
       transcriptPreview: '',
-      messages: [...state.messages, ChatMessage.system('Interview copilot stopped.')],
+      messages: [
+        ...state.messages,
+        ChatMessage.system('Interview copilot stopped.'),
+      ],
     );
   }
 
@@ -439,7 +441,36 @@ class AssistantNotifier extends Notifier<AssistantState> {
     if (text.trim().isEmpty && state.selectedImage == null) return;
     if (state.isTyping) return;
 
-    final userMessage = ChatMessage.user(text.trim(), imageData: state.selectedImage);
+    final isLocalProvider = _aiRepository.currentProviderType == AIProviderType.ollama;
+
+    // --- Token Usage Pre-check ---
+    if (!isLocalProvider) {
+      final usageState = ref.read(usageProvider);
+      
+      final isUsageInactive = usageState.usage != null && 
+          (!usageState.usage!.isActive || usageState.usage!.tokensRemaining <= 0);
+          
+      final hasLimitError = usageState.error != null && 
+          (usageState.error!.contains('inactive') || usageState.error!.contains('limit'));
+
+      if (isUsageInactive || hasLimitError) {
+        state = state.copyWith(
+          messages: [
+            ...state.messages,
+            ChatMessage.assistant(
+              usageState.error ?? 'Token limit exceeded. Please upgrade to continue.',
+              isError: true,
+            ),
+          ],
+        );
+        return;
+      }
+    }
+
+    final userMessage = ChatMessage.user(
+      text.trim(),
+      imageData: state.selectedImage,
+    );
     final history = List<ChatMessage>.from(state.messages);
 
     state = state.copyWith(
@@ -448,10 +479,18 @@ class AssistantNotifier extends Notifier<AssistantState> {
       clearImage: true,
     );
 
-    await _startStreamingResponse(text.trim(), history, userMessage: userMessage);
+    await _startStreamingResponse(
+      text.trim(),
+      history,
+      userMessage: userMessage,
+    );
   }
 
-  Future<void> _startStreamingResponse(String prompt, List<ChatMessage> history, {ChatMessage? userMessage}) async {
+  Future<void> _startStreamingResponse(
+    String prompt,
+    List<ChatMessage> history, {
+    ChatMessage? userMessage,
+  }) async {
     final assistantMessageId = const Uuid().v4();
     var currentAssistantMessage = ChatMessage(
       id: assistantMessageId,
@@ -477,21 +516,84 @@ class AssistantNotifier extends Notifier<AssistantState> {
         if (!state.messages.any((m) => m.id == assistantMessageId)) break;
 
         currentAssistantMessage = currentAssistantMessage.copyWith(
-          content: currentAssistantMessage.content + chunk,
+          content: currentAssistantMessage.content + (chunk.delta ?? ''),
+          usage: chunk.usage ?? currentAssistantMessage.usage,
         );
 
         state = state.copyWith(
-          messages: state.messages.map((m) => m.id == assistantMessageId ? currentAssistantMessage : m).toList(),
+          messages: state.messages
+              .map(
+                (m) => m.id == assistantMessageId ? currentAssistantMessage : m,
+              )
+              .toList(),
         );
       }
 
-      // 4. Stream finished.
+
+      // 4. Stream finished — gate the response behind usage/consume.
       if (state.messages.any((m) => m.id == assistantMessageId)) {
-        currentAssistantMessage = currentAssistantMessage.copyWith(isStreaming: false);
-        state = state.copyWith(
-          messages: state.messages.map((m) => m.id == assistantMessageId ? currentAssistantMessage : m).toList(),
-          isTyping: false,
+        currentAssistantMessage = currentAssistantMessage.copyWith(
+          isStreaming: false,
         );
+
+        final isLocalProvider = _aiRepository.currentProviderType == AIProviderType.ollama;
+
+        if (!isLocalProvider) {
+          // Determine token count: use AI metadata if available,
+          // otherwise estimate (~1 token per 4 characters).
+          final int tokensToConsume;
+          if (currentAssistantMessage.usage != null && currentAssistantMessage.usage!.totalTokens > 0) {
+            tokensToConsume = currentAssistantMessage.usage!.totalTokens;
+          } else {
+            tokensToConsume = (currentAssistantMessage.content.length / 4).ceil().clamp(1, 999999);
+          }
+
+          try {
+            // Call POST /api/usage/consume — this is the gatekeeper.
+            await ref.read(usageProvider.notifier).consumeTokens(
+              tokensToConsume,
+              reason: '${_aiRepository.currentProviderType.name} chat',
+            );
+
+            // ✅ Consume succeeded (200) — show the response.
+            state = state.copyWith(
+              messages: state.messages
+                  .map((m) => m.id == assistantMessageId ? currentAssistantMessage : m)
+                  .toList(),
+              isTyping: false,
+            );
+          } on UsageException catch (e) {
+            // ❌ 403 — token limit exceeded or account inactive.
+            // Compulsorily REMOVE the AI response so the user cannot read it.
+            final messagesWithoutResponse = state.messages
+                .where((m) => m.id != assistantMessageId)
+                .toList();
+
+            state = state.copyWith(
+              messages: [
+                ...messagesWithoutResponse,
+                ChatMessage.assistant(e.message, isError: true),
+              ],
+              isTyping: false,
+            );
+          } catch (_) {
+            // Network or other errors — still show the response but log it.
+            state = state.copyWith(
+              messages: state.messages
+                  .map((m) => m.id == assistantMessageId ? currentAssistantMessage : m)
+                  .toList(),
+              isTyping: false,
+            );
+          }
+        } else {
+          // Local provider (Ollama) — no consume needed, show directly.
+          state = state.copyWith(
+            messages: state.messages
+                .map((m) => m.id == assistantMessageId ? currentAssistantMessage : m)
+                .toList(),
+            isTyping: false,
+          );
+        }
       }
     } catch (e) {
       debugPrint('AssistantNotifier: AI response error: $e');
@@ -504,7 +606,11 @@ class AssistantNotifier extends Notifier<AssistantState> {
               : '${currentAssistantMessage.content}\n\n[Error: $e]',
         );
         state = state.copyWith(
-          messages: state.messages.map((m) => m.id == assistantMessageId ? currentAssistantMessage : m).toList(),
+          messages: state.messages
+              .map(
+                (m) => m.id == assistantMessageId ? currentAssistantMessage : m,
+              )
+              .toList(),
           isTyping: false,
         );
       }
@@ -515,7 +621,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   void stopGeneration() {
     _aiRepository.stopGeneration();
     state = state.copyWith(isTyping: false);
-    
+
     // Find any streaming messages and mark them as stopped.
     final updatedMessages = state.messages.map((m) {
       if (m.isStreaming) {
@@ -523,14 +629,14 @@ class AssistantNotifier extends Notifier<AssistantState> {
       }
       return m;
     }).toList();
-    
+
     state = state.copyWith(messages: updatedMessages);
   }
 
   /// ── Regenerate Last Response ──────────────────────────────────────────────
   Future<void> regenerateLastResponse() async {
     if (state.isTyping) return;
-    
+
     final messages = state.messages.toList();
     if (messages.length < 2) return;
 
@@ -544,7 +650,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
     if (messages.last.isAssistant || messages.last.isError) {
       messages.removeLast();
     }
-    
+
     state = state.copyWith(messages: messages);
     await sendMessage(prompt);
   }
@@ -618,7 +724,6 @@ class AssistantNotifier extends Notifier<AssistantState> {
 
 /// The main assistant state provider.
 /// Manages the entire conversation, window state, and overlay visibility.
-final assistantProvider =
-    NotifierProvider<AssistantNotifier, AssistantState>(
+final assistantProvider = NotifierProvider<AssistantNotifier, AssistantState>(
   AssistantNotifier.new,
 );

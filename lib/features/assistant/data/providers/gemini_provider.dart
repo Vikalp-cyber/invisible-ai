@@ -15,7 +15,7 @@ class GeminiProvider implements AIProvider {
   StreamSubscription? _subscription;
 
   @override
-  Stream<String> generateStream(
+  Stream<StreamResponse> generateStream(
     List<ChatMessage> history,
     String prompt, {
     String? apiKey,
@@ -44,19 +44,11 @@ class GeminiProvider implements AIProvider {
       
       final stream = chat.sendMessageStream(Content.model(contentParts));
 
-      final controller = StreamController<String>();
-
-      _subscription = stream.listen(
-        (GenerateContentResponse response) {
-          if (response.text != null) {
-            controller.add(response.text!);
-          }
-        },
-        onError: (error) => controller.addError(error),
-        onDone: () => controller.close(),
-      );
-
-      yield* controller.stream;
+      await for (final response in stream) {
+        if (response.text != null) {
+          yield StreamResponse(delta: response.text!);
+        }
+      }
     } catch (e) {
       throw Exception('Gemini Error: $e');
     }

@@ -15,7 +15,7 @@ class OllamaProvider implements AIProvider {
   http.Client? _client;
 
   @override
-  Stream<String> generateStream(
+  Stream<StreamResponse> generateStream(
     List<ChatMessage> history,
     String prompt, {
     String? apiKey,
@@ -65,11 +65,11 @@ class OllamaProvider implements AIProvider {
         if (chunk.trim().isEmpty) continue;
         try {
           final json = jsonDecode(chunk);
-          if (json.containsKey('message') && json['message'].containsKey('content')) {
-            yield json['message']['content'] as String;
+          if (json.containsKey('message')) {
+            yield StreamResponse(delta: json['message']['content'] as String);
           }
         } catch (e) {
-          // Ignore
+          // Ignore parse errors for partial chunks
         }
       }
     } on http.ClientException {

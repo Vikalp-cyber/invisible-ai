@@ -38,6 +38,9 @@ dependencies:
   window_protection:
     path: packages/window_protection
   record: 6.2.0
+  dio: ^5.9.2
+  flutter_secure_storage: ^10.1.0
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -47,6 +50,8 @@ dev_dependencies:
 dependency_overrides:
   record_windows:
     path: .tmp_record_windows
+  flutter_secure_storage_windows:
+    path: third_party/flutter_secure_storage_windows
 
 flutter:
   uses-material-design: true
