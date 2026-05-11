@@ -1,15 +1,13 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:invisible_ai_assistant/services/interview_audio_copilot_service.dart';
+import 'package:invisible_ai_assistant/services/virtual_audio_cable_service.dart';
+import 'package:invisible_ai_assistant/services/window_service.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../services/preference_service.dart';
-import '../../../../services/window_service.dart';
-import '../../../../services/hotkey_service.dart';
-import '../../../../services/tray_service.dart';
-import '../../../../services/secure_storage_service.dart';
-import '../../../../services/virtual_audio_cable_service.dart';
-import '../../../../services/interview_audio_copilot_service.dart';
+import '../../../../core/providers/common_providers.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
 import '../../data/ai_repository_impl.dart';
 import '../../data/providers/groq_config_providers.dart';
@@ -124,59 +122,11 @@ class AssistantState {
 // ── Providers — Services ────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Singleton provider for the PreferenceService.
-final preferenceServiceProvider = Provider<PreferenceService>((ref) {
-  return PreferenceService();
-});
-
-/// Singleton provider for the SecureStorageService.
-final secureStorageServiceProvider = Provider<SecureStorageService>((ref) {
-  return SecureStorageService();
-});
-
 /// Singleton provider for the AIRepository.
 final aiRepositoryProvider = Provider<AIRepository>((ref) {
   final secureStorage = ref.watch(secureStorageServiceProvider);
   final prefs = ref.watch(preferenceServiceProvider);
   return AIRepository(secureStorage, prefs);
-});
-
-/// Singleton provider for the ScreenCaptureService.
-final screenCaptureServiceProvider = Provider<ScreenCaptureService>((ref) {
-  return ScreenCaptureService();
-});
-
-/// Singleton provider for virtual audio cable setup helpers.
-final virtualAudioCableServiceProvider = Provider<VirtualAudioCableService>((
-  ref,
-) {
-  return VirtualAudioCableService();
-});
-
-final interviewAudioCopilotServiceProvider =
-    Provider<InterviewAudioCopilotService>((ref) {
-      final service = InterviewAudioCopilotService();
-      ref.onDispose(() {
-        service.dispose();
-      });
-      return service;
-    });
-
-/// Singleton provider for the WindowService.
-/// Depends on PreferenceService for state persistence.
-final windowServiceProvider = Provider<WindowService>((ref) {
-  final prefs = ref.watch(preferenceServiceProvider);
-  return WindowService(prefs);
-});
-
-/// Provider for the HotkeyService. Overridden in main.dart with callbacks.
-final hotkeyServiceProvider = Provider<HotkeyService>((ref) {
-  return HotkeyService();
-});
-
-/// Provider for the TrayService. Overridden in main.dart with callbacks.
-final trayServiceProvider = Provider<TrayService>((ref) {
-  return TrayService();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -462,24 +412,30 @@ class AssistantNotifier extends Notifier<AssistantState> {
     if (text.trim().isEmpty && state.selectedImage == null) return;
     if (state.isTyping) return;
 
-    final isLocalProvider = _aiRepository.currentProviderType == AIProviderType.ollama;
+    final isLocalProvider =
+        _aiRepository.currentProviderType == AIProviderType.ollama;
 
     // --- Token Usage Pre-check ---
     if (!isLocalProvider) {
       final usageState = ref.read(usageProvider);
-      
-      final isUsageInactive = usageState.usage != null && 
-          (!usageState.usage!.isActive || usageState.usage!.tokensRemaining <= 0);
-          
-      final hasLimitError = usageState.error != null && 
-          (usageState.error!.contains('inactive') || usageState.error!.contains('limit'));
+
+      final isUsageInactive =
+          usageState.usage != null &&
+          (!usageState.usage!.isActive ||
+              usageState.usage!.tokensRemaining <= 0);
+
+      final hasLimitError =
+          usageState.error != null &&
+          (usageState.error!.contains('inactive') ||
+              usageState.error!.contains('limit'));
 
       if (isUsageInactive || hasLimitError) {
         state = state.copyWith(
           messages: [
             ...state.messages,
             ChatMessage.assistant(
-              usageState.error ?? 'Token limit exceeded. Please upgrade to continue.',
+              usageState.error ??
+                  'Token limit exceeded. Please upgrade to continue.',
               isError: true,
             ),
           ],
@@ -550,36 +506,45 @@ class AssistantNotifier extends Notifier<AssistantState> {
         );
       }
 
-
       // 4. Stream finished — gate the response behind usage/consume.
       if (state.messages.any((m) => m.id == assistantMessageId)) {
         currentAssistantMessage = currentAssistantMessage.copyWith(
           isStreaming: false,
         );
 
-        final isLocalProvider = _aiRepository.currentProviderType == AIProviderType.ollama;
+        final isLocalProvider =
+            _aiRepository.currentProviderType == AIProviderType.ollama;
 
         if (!isLocalProvider) {
           // Determine token count: use AI metadata if available,
           // otherwise estimate (~1 token per 4 characters).
           final int tokensToConsume;
-          if (currentAssistantMessage.usage != null && currentAssistantMessage.usage!.totalTokens > 0) {
+          if (currentAssistantMessage.usage != null &&
+              currentAssistantMessage.usage!.totalTokens > 0) {
             tokensToConsume = currentAssistantMessage.usage!.totalTokens;
           } else {
-            tokensToConsume = (currentAssistantMessage.content.length / 4).ceil().clamp(1, 999999);
+            tokensToConsume = (currentAssistantMessage.content.length / 4)
+                .ceil()
+                .clamp(1, 999999);
           }
 
           try {
             // Call POST /api/usage/consume — this is the gatekeeper.
-            await ref.read(usageProvider.notifier).consumeTokens(
-              tokensToConsume,
-              reason: '${_aiRepository.currentProviderType.name} chat',
-            );
+            await ref
+                .read(usageProvider.notifier)
+                .consumeTokens(
+                  tokensToConsume,
+                  reason: '${_aiRepository.currentProviderType.name} chat',
+                );
 
             // ✅ Consume succeeded (200) — show the response.
             state = state.copyWith(
               messages: state.messages
-                  .map((m) => m.id == assistantMessageId ? currentAssistantMessage : m)
+                  .map(
+                    (m) => m.id == assistantMessageId
+                        ? currentAssistantMessage
+                        : m,
+                  )
                   .toList(),
               isTyping: false,
             );
@@ -601,7 +566,11 @@ class AssistantNotifier extends Notifier<AssistantState> {
             // Network or other errors — still show the response but log it.
             state = state.copyWith(
               messages: state.messages
-                  .map((m) => m.id == assistantMessageId ? currentAssistantMessage : m)
+                  .map(
+                    (m) => m.id == assistantMessageId
+                        ? currentAssistantMessage
+                        : m,
+                  )
                   .toList(),
               isTyping: false,
             );
@@ -610,7 +579,10 @@ class AssistantNotifier extends Notifier<AssistantState> {
           // Local provider (Ollama) — no consume needed, show directly.
           state = state.copyWith(
             messages: state.messages
-                .map((m) => m.id == assistantMessageId ? currentAssistantMessage : m)
+                .map(
+                  (m) =>
+                      m.id == assistantMessageId ? currentAssistantMessage : m,
+                )
                 .toList(),
             isTyping: false,
           );

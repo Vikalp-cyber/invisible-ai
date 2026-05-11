@@ -14,17 +14,44 @@ class BrowserOAuthService {
   static const _stateAlphabet = '0123456789abcdef';
 
   final DesktopOAuthConfig _config;
+  
+  final List<HttpServer> _activeServers = [];
+  final List<StreamSubscription<HttpRequest>> _activeSubscriptions = [];
+  Completer<BrowserOAuthCallback>? _activeCompleter;
 
-  const BrowserOAuthService(this._config);
+  BrowserOAuthService(this._config);
+
+  Future<void> cancel() async {
+    if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
+      _activeCompleter!.completeError(
+        const AuthException('Login cancelled by user.', code: 'cancelled'),
+      );
+    }
+    _activeCompleter = null;
+
+    for (final subscription in _activeSubscriptions) {
+      await subscription.cancel();
+    }
+    _activeSubscriptions.clear();
+
+    for (final server in _activeServers) {
+      await server.close(force: true);
+    }
+    _activeServers.clear();
+  }
 
   Future<BrowserOAuthCallback> signInWithGoogle() async {
+    await cancel();
+    
     final servers = await _bindServers();
-    final subscriptions = <StreamSubscription<HttpRequest>>[];
+    _activeServers.addAll(servers);
+    
     final completer = Completer<BrowserOAuthCallback>();
+    _activeCompleter = completer;
 
     try {
       for (final server in servers) {
-        subscriptions.add(
+        _activeSubscriptions.add(
           server.listen(
             (request) => _handleRequest(request, completer),
             onError: (Object error, StackTrace stackTrace) {
@@ -59,20 +86,12 @@ class BrowserOAuthService {
         onTimeout: () {
           throw const AuthException(
             'Google sign-in was cancelled or timed out before the callback arrived.',
+            code: 'timeout',
           );
         },
       );
-    } on SocketException catch (error) {
-      throw AuthException(
-        'Could not start the localhost callback listener on ${_config.callbackUri}: $error',
-      );
     } finally {
-      for (final subscription in subscriptions) {
-        await subscription.cancel();
-      }
-      for (final server in servers) {
-        await server.close(force: true);
-      }
+      await cancel();
     }
   }
 

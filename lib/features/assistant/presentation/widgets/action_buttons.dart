@@ -15,6 +15,7 @@ import '../../../overlay/domain/models/overlay_mode.dart';
 import '../../../overlay/presentation/providers/overlay_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/assistant_provider.dart';
+import '../../../../core/providers/common_providers.dart';
 import '../../../usage/presentation/providers/usage_provider.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
 

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../assistant/presentation/providers/assistant_provider.dart';
+import '../../../../core/providers/common_providers.dart';
 import '../../application/overlay_notification_center.dart';
 import '../../application/smart_layout_manager.dart';
 import '../../application/window_orchestrator.dart';

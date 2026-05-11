@@ -11,13 +11,16 @@ class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource _remote;
   final AuthSessionManager _sessionManager;
 
-  const AuthRepositoryImpl({
+  AuthRepositoryImpl({
     required BrowserOAuthService browserOAuthService,
     required AuthRemoteDataSource remote,
     required AuthSessionManager sessionManager,
   }) : _browserOAuthService = browserOAuthService,
        _remote = remote,
        _sessionManager = sessionManager;
+
+  @override
+  Future<void> cancelSignIn() => _browserOAuthService.cancel();
 
   @override
   Future<AuthSession> signInWithGoogle() async {

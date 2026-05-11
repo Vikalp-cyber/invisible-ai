@@ -28,7 +28,7 @@ class InvisibleAIApp extends ConsumerWidget {
       themeMode: ThemeMode.dark,
 
       // ── Home Screen ──────────────────────────────────────────────────────
-      home: authState.isLoading
+      home: authState.isBootstrapping
           ? const _AuthBootstrapLoader()
           : (authState.isAuthenticated
                 ? const AssistantScreen()
