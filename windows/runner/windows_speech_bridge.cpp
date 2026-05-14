@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <vector>
@@ -18,6 +19,7 @@
 namespace {
 constexpr char kMethodChannelName[] = "invisible_ai_assistant/windows_speech_method";
 constexpr char kEventChannelName[] = "invisible_ai_assistant/windows_speech_events";
+constexpr char kPcmEventChannelName[] = "invisible_ai_assistant/windows_loopback_pcm_events";
 
 constexpr WORD kTargetChannels = 1;
 constexpr DWORD kTargetSampleRate = 16000;
@@ -62,6 +64,13 @@ std::string CoTaskMemWideToUtf8(WCHAR* raw) {
   std::wstring value(raw);
   ::CoTaskMemFree(raw);
   return WideToUtf8(value);
+}
+
+std::string FormatHresultError(const char* message, HRESULT hr) {
+  char buf[224];
+  snprintf(buf, sizeof(buf), "%s (HRESULT 0x%08lX).", message,
+           static_cast<unsigned long>(hr));
+  return std::string(buf);
 }
 }  // namespace
 
@@ -263,6 +272,28 @@ class SinkForwardingStreamHandler : public flutter::StreamHandler<WindowsSpeechB
  private:
   WindowsSpeechBridge* owner_;
 };
+
+class PcmSinkForwardingStreamHandler : public flutter::StreamHandler<WindowsSpeechBridge::EncodableValue> {
+ public:
+  explicit PcmSinkForwardingStreamHandler(WindowsSpeechBridge* owner) : owner_(owner) {}
+
+ protected:
+  std::unique_ptr<flutter::StreamHandlerError<WindowsSpeechBridge::EncodableValue>> OnListenInternal(
+      const WindowsSpeechBridge::EncodableValue*,
+      std::unique_ptr<flutter::EventSink<WindowsSpeechBridge::EncodableValue>>&& sink) override {
+    owner_->SetPcmEventSink(std::move(sink));
+    return nullptr;
+  }
+
+  std::unique_ptr<flutter::StreamHandlerError<WindowsSpeechBridge::EncodableValue>> OnCancelInternal(
+      const WindowsSpeechBridge::EncodableValue*) override {
+    owner_->ClearPcmEventSink();
+    return nullptr;
+  }
+
+ private:
+  WindowsSpeechBridge* owner_;
+};
 }  // namespace
 
 WindowsSpeechBridge::WindowsSpeechBridge(flutter::BinaryMessenger* messenger) {
@@ -279,6 +310,10 @@ WindowsSpeechBridge::WindowsSpeechBridge(flutter::BinaryMessenger* messenger) {
       });
 
   event_channel_->SetStreamHandler(std::make_unique<SinkForwardingStreamHandler>(this));
+
+  pcm_event_channel_ = std::make_unique<flutter::EventChannel<EncodableValue>>(
+      messenger, kPcmEventChannelName, &flutter::StandardMethodCodec::GetInstance());
+  pcm_event_channel_->SetStreamHandler(std::make_unique<PcmSinkForwardingStreamHandler>(this));
 }
 
 WindowsSpeechBridge::~WindowsSpeechBridge() {
@@ -293,6 +328,16 @@ void WindowsSpeechBridge::SetEventSink(std::unique_ptr<EventSink> sink) {
 void WindowsSpeechBridge::ClearEventSink() {
   std::lock_guard<std::mutex> lock(state_mutex_);
   event_sink_.reset();
+}
+
+void WindowsSpeechBridge::SetPcmEventSink(std::unique_ptr<EventSink> sink) {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  pcm_event_sink_ = std::shared_ptr<EventSink>(std::move(sink));
+}
+
+void WindowsSpeechBridge::ClearPcmEventSink() {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  pcm_event_sink_.reset();
 }
 
 void WindowsSpeechBridge::HandleMethodCall(const MethodCall& call,
@@ -330,6 +375,22 @@ void WindowsSpeechBridge::HandleMethodCall(const MethodCall& call,
       result->Error("start_failed", error);
       return;
     }
+    result->Success();
+    return;
+  }
+
+  if (call.method_name() == "startLoopbackPcm") {
+    std::string error;
+    if (!StartLoopbackPcm(&error)) {
+      result->Error("start_failed", error);
+      return;
+    }
+    result->Success();
+    return;
+  }
+
+  if (call.method_name() == "stopLoopbackPcm") {
+    StopLoopbackPcmOnly();
     result->Success();
     return;
   }
@@ -483,16 +544,50 @@ bool WindowsSpeechBridge::ConfigureRecognizerForDevice(const std::string& reques
     return false;
   }
 
-  hr = recognizer_->SetRecoState(SPRST_ACTIVE_ALWAYS);
-  if (FAILED(hr)) {
-    *error = "Failed to start recognition state.";
-    return false;
-  }
-
+  // Dictation load order varies by Windows/SAPI build: some require SPRST_INACTIVE,
+  // others return E_INVALIDARG (0x80070057) unless the recognizer is already active.
+  bool dictation_loaded_inactive = false;
   hr = grammar_->LoadDictation(nullptr, SPLO_DYNAMIC);
   if (FAILED(hr)) {
-    *error = "Failed to load dictation grammar.";
-    return false;
+    hr = grammar_->LoadDictation(nullptr, SPLO_STATIC);
+  }
+  if (SUCCEEDED(hr)) {
+    dictation_loaded_inactive = true;
+  } else {
+    hr = recognizer_->SetRecoState(SPRST_ACTIVE_ALWAYS);
+    if (FAILED(hr)) {
+      hr = recognizer_->SetRecoState(SPRST_ACTIVE);
+    }
+    if (FAILED(hr)) {
+      *error = FormatHresultError(
+          "Failed to start recognition state. Check microphone privacy settings and "
+          "that no other app has exclusive use of the mic.",
+          hr);
+      return false;
+    }
+    hr = grammar_->LoadDictation(nullptr, SPLO_DYNAMIC);
+    if (FAILED(hr)) {
+      hr = grammar_->LoadDictation(nullptr, SPLO_STATIC);
+    }
+    if (FAILED(hr)) {
+      *error = FormatHresultError(
+          "Failed to load dictation grammar (tried inactive + active recognizer).", hr);
+      return false;
+    }
+  }
+
+  if (dictation_loaded_inactive) {
+    hr = recognizer_->SetRecoState(SPRST_ACTIVE_ALWAYS);
+    if (FAILED(hr)) {
+      hr = recognizer_->SetRecoState(SPRST_ACTIVE);
+    }
+    if (FAILED(hr)) {
+      *error = FormatHresultError(
+          "Failed to start recognition state. Check microphone privacy settings and "
+          "that no other app has exclusive use of the mic.",
+          hr);
+      return false;
+    }
   }
 
   hr = E_FAIL;
@@ -503,7 +598,7 @@ bool WindowsSpeechBridge::ConfigureRecognizerForDevice(const std::string& reques
     }
   }
   if (FAILED(hr)) {
-    *error = "Failed to activate dictation grammar.";
+    *error = FormatHresultError("Failed to activate dictation grammar.", hr);
     return false;
   }
 
@@ -588,19 +683,42 @@ bool WindowsSpeechBridge::ConfigureRecognizerForLoopbackStream(std::string* erro
     return false;
   }
 
-  // For stream-based input, the dictation engine needs the recognizer to be
-  // running and audio to be flowing before SetDictationState can succeed.
-  // Activate the recognizer first, load dictation as dynamic, then activate.
-  hr = recognizer_->SetRecoState(SPRST_ACTIVE_ALWAYS);
-  if (FAILED(hr)) {
-    *error = "Failed to start recognition state.";
-    return false;
-  }
-
+  bool dictation_loaded_inactive = false;
   hr = grammar_->LoadDictation(nullptr, SPLO_DYNAMIC);
   if (FAILED(hr)) {
-    *error = "Failed to load dictation grammar.";
-    return false;
+    hr = grammar_->LoadDictation(nullptr, SPLO_STATIC);
+  }
+  if (SUCCEEDED(hr)) {
+    dictation_loaded_inactive = true;
+  } else {
+    hr = recognizer_->SetRecoState(SPRST_ACTIVE_ALWAYS);
+    if (FAILED(hr)) {
+      hr = recognizer_->SetRecoState(SPRST_ACTIVE);
+    }
+    if (FAILED(hr)) {
+      *error = FormatHresultError("Failed to start recognition state on loopback stream.", hr);
+      return false;
+    }
+    hr = grammar_->LoadDictation(nullptr, SPLO_DYNAMIC);
+    if (FAILED(hr)) {
+      hr = grammar_->LoadDictation(nullptr, SPLO_STATIC);
+    }
+    if (FAILED(hr)) {
+      *error = FormatHresultError(
+          "Failed to load dictation grammar on loopback (tried inactive + active).", hr);
+      return false;
+    }
+  }
+
+  if (dictation_loaded_inactive) {
+    hr = recognizer_->SetRecoState(SPRST_ACTIVE_ALWAYS);
+    if (FAILED(hr)) {
+      hr = recognizer_->SetRecoState(SPRST_ACTIVE);
+    }
+    if (FAILED(hr)) {
+      *error = FormatHresultError("Failed to start recognition state on loopback stream.", hr);
+      return false;
+    }
   }
 
   // Try a few times: dictation engine warm-up can briefly fail while waiting
@@ -613,7 +731,7 @@ bool WindowsSpeechBridge::ConfigureRecognizerForLoopbackStream(std::string* erro
     }
   }
   if (FAILED(hr)) {
-    *error = "Failed to activate dictation grammar.";
+    *error = FormatHresultError("Failed to activate dictation grammar.", hr);
     return false;
   }
 
@@ -714,6 +832,8 @@ bool WindowsSpeechBridge::StartListeningOnSystemAudio(std::string* error) {
 }
 
 void WindowsSpeechBridge::StopListening() {
+  StopLoopbackPcmOnly();
+
   is_listening_ = false;
   is_loopback_active_ = false;
 
@@ -952,6 +1072,229 @@ void WindowsSpeechBridge::LoopbackCaptureLoop() {
           loopback_stream_->PushAudio(reinterpret_cast<const uint8_t*>(silence.data()),
                                       silence.size() * sizeof(int16_t));
         }
+        last_audio_time = now;
+      }
+      Sleep(5);
+    }
+  }
+
+  audio_client->Stop();
+  ::CoTaskMemFree(mix_format);
+}
+
+void WindowsSpeechBridge::StopLoopbackPcmOnly() {
+  is_pcm_forward_active_ = false;
+  if (pcm_forward_thread_.joinable()) {
+    pcm_forward_thread_.join();
+  }
+}
+
+bool WindowsSpeechBridge::StartLoopbackPcm(std::string* /*error*/) {
+  StopLoopbackPcmOnly();
+  is_pcm_forward_active_ = true;
+  pcm_forward_thread_ = std::thread([this]() {
+    HRESULT init_hr = ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(init_hr) && init_hr != RPC_E_CHANGED_MODE) {
+      is_pcm_forward_active_ = false;
+      return;
+    }
+    LoopbackCapturePcmOnlyLoop();
+    if (init_hr == S_OK || init_hr == S_FALSE) {
+      ::CoUninitialize();
+    }
+  });
+  return true;
+}
+
+void WindowsSpeechBridge::EmitPcmChunk(std::vector<uint8_t> bytes) {
+  if (bytes.empty() || !platform_dispatcher_) {
+    return;
+  }
+  platform_dispatcher_->Post([this, bytes = std::move(bytes)]() mutable {
+    std::shared_ptr<EventSink> sink_copy;
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      sink_copy = pcm_event_sink_;
+    }
+    if (!sink_copy) {
+      return;
+    }
+    sink_copy->Success(flutter::EncodableValue(std::move(bytes)));
+  });
+}
+
+void WindowsSpeechBridge::EmitPcmStreamError(const std::string& message) {
+  if (!platform_dispatcher_) {
+    return;
+  }
+  std::string captured = message;
+  platform_dispatcher_->Post([this, captured]() {
+    std::shared_ptr<EventSink> sink_copy;
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      sink_copy = pcm_event_sink_;
+    }
+    if (!sink_copy) {
+      return;
+    }
+    flutter::EncodableMap payload;
+    payload[EncodableValue("type")] = EncodableValue("error");
+    payload[EncodableValue("message")] = EncodableValue(captured);
+    sink_copy->Success(EncodableValue(payload));
+  });
+}
+
+void WindowsSpeechBridge::LoopbackCapturePcmOnlyLoop() {
+  Microsoft::WRL::ComPtr<IMMDeviceEnumerator> enumerator;
+  HRESULT hr = ::CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                  IID_PPV_ARGS(&enumerator));
+  if (FAILED(hr) || !enumerator) {
+    EmitPcmStreamError("Failed to create audio device enumerator.");
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<IMMDevice> device;
+  hr = enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device);
+  if (FAILED(hr) || !device) {
+    EmitPcmStreamError("No default audio output device is available.");
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<IAudioClient> audio_client;
+  hr = device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, &audio_client);
+  if (FAILED(hr) || !audio_client) {
+    EmitPcmStreamError("Failed to activate audio client.");
+    return;
+  }
+
+  WAVEFORMATEX* mix_format = nullptr;
+  hr = audio_client->GetMixFormat(&mix_format);
+  if (FAILED(hr) || mix_format == nullptr) {
+    EmitPcmStreamError("Failed to query speaker mix format.");
+    return;
+  }
+
+  REFERENCE_TIME buffer_duration = 10000000;
+  hr = audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK,
+                                buffer_duration, 0, mix_format, nullptr);
+  if (FAILED(hr)) {
+    ::CoTaskMemFree(mix_format);
+    EmitPcmStreamError("Failed to initialize loopback capture.");
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<IAudioCaptureClient> capture_client;
+  hr = audio_client->GetService(IID_PPV_ARGS(&capture_client));
+  if (FAILED(hr) || !capture_client) {
+    ::CoTaskMemFree(mix_format);
+    EmitPcmStreamError("Failed to obtain capture client.");
+    return;
+  }
+
+  hr = audio_client->Start();
+  if (FAILED(hr)) {
+    ::CoTaskMemFree(mix_format);
+    EmitPcmStreamError("Failed to start loopback capture.");
+    return;
+  }
+
+  const WORD source_channels = mix_format->nChannels;
+  const DWORD source_rate = mix_format->nSamplesPerSec;
+  const WORD source_bits = mix_format->wBitsPerSample;
+  const WORD source_block = mix_format->nBlockAlign;
+
+  bool source_is_float = (mix_format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT);
+  if (mix_format->wFormatTag == WAVE_FORMAT_EXTENSIBLE && mix_format->cbSize >= 22) {
+    auto* ext = reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(mix_format);
+    source_is_float = (ext->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
+  }
+
+  const double resample_ratio = static_cast<double>(kTargetSampleRate) /
+                                static_cast<double>(source_rate);
+  double resample_phase = 0.0;
+
+  auto last_audio_time = std::chrono::steady_clock::now();
+  const auto silence_inject_threshold = std::chrono::milliseconds(40);
+
+  std::vector<int16_t> output_pcm;
+  output_pcm.reserve(4096);
+
+  while (is_pcm_forward_active_) {
+    UINT32 packet_length = 0;
+    if (FAILED(capture_client->GetNextPacketSize(&packet_length))) {
+      Sleep(5);
+      continue;
+    }
+
+    bool packet_processed = false;
+    while (packet_length != 0) {
+      BYTE* data = nullptr;
+      UINT32 frames_available = 0;
+      DWORD flags = 0;
+      hr = capture_client->GetBuffer(&data, &frames_available, &flags, nullptr, nullptr);
+      if (FAILED(hr) || data == nullptr) {
+        break;
+      }
+
+      output_pcm.clear();
+
+      for (UINT32 frame = 0; frame < frames_available; ++frame) {
+        float mono_sample = 0.0f;
+        if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0) {
+          float channel_sum = 0.0f;
+          for (WORD ch = 0; ch < source_channels; ++ch) {
+            const BYTE* sample_ptr = data + (frame * source_block) + (ch * (source_bits / 8));
+            float sample = 0.0f;
+            if (source_is_float && source_bits == 32) {
+              sample = *reinterpret_cast<const float*>(sample_ptr);
+            } else if (!source_is_float && source_bits == 16) {
+              sample = static_cast<float>(*reinterpret_cast<const int16_t*>(sample_ptr)) / 32768.0f;
+            } else if (!source_is_float && source_bits == 32) {
+              sample = static_cast<float>(*reinterpret_cast<const int32_t*>(sample_ptr)) /
+                       static_cast<float>(2147483648.0);
+            } else if (!source_is_float && source_bits == 24) {
+              int32_t packed = (sample_ptr[0]) | (sample_ptr[1] << 8) |
+                               (static_cast<int8_t>(sample_ptr[2]) << 16);
+              sample = static_cast<float>(packed) / 8388608.0f;
+            }
+            channel_sum += sample;
+          }
+          mono_sample = (source_channels > 0) ? channel_sum / static_cast<float>(source_channels)
+                                            : 0.0f;
+        }
+
+        resample_phase += resample_ratio;
+        while (resample_phase >= 1.0) {
+          float clamped = std::clamp(mono_sample, -1.0f, 1.0f);
+          output_pcm.push_back(static_cast<int16_t>(clamped * 32767.0f));
+          resample_phase -= 1.0;
+        }
+      }
+
+      if (!output_pcm.empty()) {
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(output_pcm.data());
+        const size_t byte_count = output_pcm.size() * sizeof(int16_t);
+        EmitPcmChunk(std::vector<uint8_t>(p, p + byte_count));
+      }
+
+      capture_client->ReleaseBuffer(frames_available);
+      packet_processed = true;
+
+      if (FAILED(capture_client->GetNextPacketSize(&packet_length))) {
+        break;
+      }
+    }
+
+    if (packet_processed) {
+      last_audio_time = std::chrono::steady_clock::now();
+    } else {
+      auto now = std::chrono::steady_clock::now();
+      if (now - last_audio_time > silence_inject_threshold) {
+        const size_t silence_samples = (kTargetSampleRate * 40) / 1000;
+        std::vector<int16_t> silence(silence_samples, 0);
+        const uint8_t* p = reinterpret_cast<const uint8_t*>(silence.data());
+        const size_t byte_count = silence.size() * sizeof(int16_t);
+        EmitPcmChunk(std::vector<uint8_t>(p, p + byte_count));
         last_audio_time = now;
       }
       Sleep(5);

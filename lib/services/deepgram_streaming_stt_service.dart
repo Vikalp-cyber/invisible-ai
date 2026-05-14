@@ -14,10 +14,40 @@ class DeepgramStreamingSttService {
 
   Stream<TranscriptionEvent> get events => _controller.stream;
 
-  Future<void> connect({required String apiKey}) async {
-    final uri = Uri.parse(
-      'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&interim_results=true&punctuate=true&endpointing=250&smart_format=true',
-    );
+  /// Builds the live listen WebSocket URI from optional REST base
+  /// (e.g. `https://api.deepgram.com/v1`). When [restBaseUrl] is null, uses
+  /// Deepgram's public default.
+  static Uri buildListenWebSocketUri(String? restBaseUrl) {
+    const qs =
+        'encoding=linear16&sample_rate=16000&channels=1&interim_results=true'
+        '&punctuate=true&endpointing=250&smart_format=true&model=nova-2';
+    final t = restBaseUrl?.trim();
+    if (t == null || t.isEmpty) {
+      return Uri.parse('wss://api.deepgram.com/v1/listen?$qs');
+    }
+    var u = Uri.parse(t);
+    var scheme = u.scheme;
+    if (scheme == 'https') {
+      scheme = 'wss';
+    } else if (scheme == 'http') {
+      scheme = 'ws';
+    } else if (scheme != 'wss' && scheme != 'ws') {
+      scheme = 'wss';
+    }
+    var path = u.path;
+    if (path.isEmpty || path == '/') {
+      path = '/v1/listen';
+    } else if (!path.endsWith('/listen')) {
+      path = path.endsWith('/') ? '${path}listen' : '$path/listen';
+    }
+    return u.replace(scheme: scheme, path: path, query: qs);
+  }
+
+  Future<void> connect({
+    required String apiKey,
+    String? listenBaseUrl,
+  }) async {
+    final uri = buildListenWebSocketUri(listenBaseUrl);
 
     _socket = await WebSocket.connect(
       uri.toString(),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../../domain/models/chat_message.dart';
+import '../../domain/models/groq_runtime_config.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
 import 'groq_exceptions.dart';
 
@@ -14,6 +15,31 @@ class GroqProvider implements AIProvider {
   bool get requiresApiKey => true;
 
   http.Client? _client;
+
+  /// OpenAI-compatible base from `groq.baseUrl`, e.g. `https://api.groq.com/openai/v1`.
+  String? _runtimeChatBaseUrl;
+
+  void applyChatBaseUrl(String? baseUrl) {
+    final t = baseUrl?.trim();
+    _runtimeChatBaseUrl = t == null || t.isEmpty ? null : t;
+  }
+
+  Uri _chatCompletionsUri() {
+    const fallback = 'https://api.groq.com/openai/v1/chat/completions';
+    final raw = _runtimeChatBaseUrl?.trim();
+    if (raw == null || raw.isEmpty) {
+      return Uri.parse(fallback);
+    }
+    var u = Uri.parse(raw);
+    if (u.path.contains('chat/completions')) {
+      return u;
+    }
+    var base = u.toString();
+    if (base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+    return Uri.parse('$base/chat/completions');
+  }
 
   @override
   Stream<StreamResponse> generateStream(
@@ -43,18 +69,12 @@ class GroqProvider implements AIProvider {
     // Add current prompt
     messages.add({'role': 'user', 'content': prompt});
 
-    final request = http.Request(
-      'POST',
-      Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
-    );
+    final request = http.Request('POST', _chatCompletionsUri());
     request.headers.addAll({
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $apiKey',
     });
-    final model =
-        (providerModelId != null && providerModelId.isNotEmpty)
-            ? providerModelId
-            : 'llama-3.3-70b-versatile';
+    final model = GroqModelIds.forChatRequest(providerModelId);
     request.body = jsonEncode({
       'model': model,
       'messages': messages,
@@ -70,7 +90,8 @@ class GroqProvider implements AIProvider {
         final code = response.statusCode;
 
         // Throw typed exceptions so the fallback layer can decide to retry.
-        if (code == 429) {
+        if (code == 429 || code == 402 || code == 408) {
+          // 402/408: quota or capacity-style limits — retry with another API key when available.
           throw GroqRateLimitException(code, errorBody);
         } else if (code == 401 || code == 403) {
           throw GroqAuthException(code, errorBody);

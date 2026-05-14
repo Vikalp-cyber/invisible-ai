@@ -42,8 +42,17 @@ class AIRepository {
   void applyGroqRuntimeConfig(GroqRuntimeConfig config) {
     _groqApiKeys = List<String>.from(config.apiKeys);
     _groqKeyIndex = 0; // reset to first key on fresh config
-    _groqModels = List<GroqModelOption>.from(config.models);
+    var models = List<GroqModelOption>.from(config.models);
+    if (models.isEmpty) {
+      final id = GroqModelIds.canonicalize(config.chatModel);
+      if (id != null) {
+        models = [GroqModelOption(id: id)];
+      }
+    }
+    _groqModels = models;
     _groqDefaultModelId = config.resolvedDefaultModelId;
+    (_providers[AIProviderType.groq] as GroqProvider)
+        .applyChatBaseUrl(config.chatBaseUrl);
     // Do not persist the Groq secret; clear any legacy locally stored key.
     unawaited(_secureStorage.deleteApiKey(AIProviderType.groq));
     debugPrint(
@@ -57,15 +66,24 @@ class AIRepository {
     _groqKeyIndex = 0;
     _groqModels = const [];
     _groqDefaultModelId = null;
+    (_providers[AIProviderType.groq] as GroqProvider).applyChatBaseUrl(null);
   }
 
   List<GroqModelOption> get groqModelOptions => List.unmodifiable(_groqModels);
 
   String? _resolveGroqModelId() {
-    final saved = _prefs.getString(AppConstants.keyGroqModelId);
-    if (saved.isNotEmpty &&
-        _groqModels.any((m) => m.id == saved)) {
-      return saved;
+    final saved = _prefs.getString(AppConstants.keyGroqModelId).trim();
+    if (saved.isNotEmpty) {
+      final migrated = GroqModelIds.canonicalize(saved);
+      if (_groqModels.any((m) => m.id == saved)) {
+        return saved;
+      }
+      if (migrated != null && _groqModels.any((m) => m.id == migrated)) {
+        return migrated;
+      }
+      if (migrated != null && migrated != saved) {
+        return migrated;
+      }
     }
     return _groqDefaultModelId ??
         (_groqModels.isNotEmpty ? _groqModels.first.id : null);
@@ -112,7 +130,7 @@ class AIRepository {
   /// Generates a streaming response using the currently selected provider.
   ///
   /// For **Groq**, automatically rotates through available API keys on
-  /// retriable failures (429 rate-limit, 500 server error, 401/403 auth).
+  /// retriable failures (429 / 402 / 408 limits, 401/403 auth, 5xx server).
   Stream<StreamResponse> generateStream(
     List<ChatMessage> history,
     String prompt, {

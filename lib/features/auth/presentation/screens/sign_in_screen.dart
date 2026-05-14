@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/windows_title_bar.dart';
 import '../providers/auth_provider.dart';
@@ -41,7 +42,7 @@ class SignInScreen extends ConsumerWidget {
           // ── Main Content ───────────────────────────────────────────────────
           Column(
             children: [
-              const WindowsTitleBar(title: 'Invisible AI Assistant'),
+              const WindowsTitleBar(title: AppStrings.appTitle),
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -119,7 +120,7 @@ class SignInScreen extends ConsumerWidget {
                                       ),
                                   const SizedBox(height: 6),
                                   const Text(
-                                    'Your invisible intelligence awaits.',
+                                    'Sign in to get started.',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       color: AppColors.textSecondary,

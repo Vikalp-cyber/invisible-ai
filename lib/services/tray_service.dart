@@ -57,7 +57,7 @@ class TrayService with TrayListener {
 
   /// ── Setup Context Menu ────────────────────────────────────────────────────
   /// Creates the right-click tray menu with the following items:
-  ///   - Show Invisible AI
+  ///   - Show Flowdesk
   ///   - New Chat
   ///   - Toggle Always on Top
   ///   - ─── (separator)

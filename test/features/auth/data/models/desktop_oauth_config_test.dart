@@ -10,11 +10,11 @@ void main() {
 
         expect(
           config.callbackUri.toString(),
-          'http://localhost:45872/callback',
+          'http://flowdesk-backend.luminoai.online:45872/callback',
         );
         expect(
           config.googleAuthUri.toString(),
-          'https://invisible-ai-backend-5f7x.onrender.com/api/auth/google',
+          'https://flowdesk-backend.luminoai.online/api/auth/google',
         );
         expect(
           config.googleAuthUri.queryParameters.containsKey('redirect_uri'),
@@ -34,7 +34,7 @@ void main() {
 
         expect(
           authorizeUri.toString(),
-          'https://invisible-ai-backend-5f7x.onrender.com/api/auth/google?source=desktop&state=deadbeef',
+          'https://flowdesk-backend.luminoai.online/api/auth/google?source=desktop&state=deadbeef',
         );
       },
     );
@@ -54,16 +54,16 @@ DesktopOAuthConfig _buildConfig({
   String callbackPath = '/callback',
 }) {
   return DesktopOAuthConfig(
-    baseUrl: 'https://invisible-ai-backend-5f7x.onrender.com',
+    baseUrl: 'https://flowdesk-backend.luminoai.online',
     googleAuthPath: googleAuthPath,
     refreshPath: '/api/auth/refresh',
     mePath: '/api/auth/me',
     logoutPath: '',
-    groqClientConfigPath: '/api/groq/client-config',
+    clientConfigPath: '/api/client-config',
     accessTokenParam: 'accessToken',
     refreshTokenParam: 'refreshToken',
     userParam: 'user',
-    callbackHost: 'invisible-ai-backend-5f7x.onrender.com',
+    callbackHost: 'flowdesk-backend.luminoai.online',
     callbackPort: 45872,
     callbackPath: callbackPath,
     loginTimeout: const Duration(seconds: 180),

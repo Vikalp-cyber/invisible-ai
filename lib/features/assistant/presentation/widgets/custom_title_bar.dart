@@ -11,7 +11,7 @@ import '../providers/assistant_provider.dart';
 /// ── Custom Title Bar ───────────────────────────────────────────────────────
 /// A frameless, draggable title bar with:
 /// - AI brain icon with animated glow
-/// - App title "Invisible AI"
+/// - App title from [AppStrings.appTitle]
 /// - Active status indicator (green pulsing dot)
 /// - Hotkey hint badge
 /// - Always-on-top toggle (pin icon)

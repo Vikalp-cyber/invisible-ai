@@ -6,11 +6,11 @@ import 'package:invisible_ai_assistant/services/virtual_audio_cable_service.dart
 import 'package:invisible_ai_assistant/services/window_service.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../services/preference_service.dart';
 import '../../../../core/providers/common_providers.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
 import '../../data/ai_repository_impl.dart';
-import '../../data/providers/groq_config_providers.dart';
+import '../../data/providers/groq_config_providers.dart'
+    show clientRuntimeConfigProvider, deepgramRuntimeHolderProvider;
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/models/chat_message.dart';
 import '../../domain/models/audio_input_device.dart';
@@ -45,7 +45,10 @@ class AssistantState {
   /// The currently captured image ready to be sent.
   final Uint8List? selectedImage;
   final bool isInterviewCopilotActive;
-  final String transcriptPreview;
+  /// Finalized speech-to-text segments while interview/speaker copilot is active.
+  final String listenFinalizedText;
+  /// Current partial hypothesis while copilot is active.
+  final String listenPartialText;
   final List<AudioInputDevice> audioDevices;
   final String? selectedAudioDeviceId;
 
@@ -57,10 +60,27 @@ class AssistantState {
     this.shouldFocusInput = false,
     this.selectedImage,
     this.isInterviewCopilotActive = false,
-    this.transcriptPreview = '',
+    this.listenFinalizedText = '',
+    this.listenPartialText = '',
     this.audioDevices = const [],
     this.selectedAudioDeviceId,
   });
+
+  /// Text shown for “Send” when the input box is empty: finalized + partial.
+  String get listenDraftDisplay {
+    final f = listenFinalizedText.trim();
+    final p = listenPartialText.trim();
+    if (f.isEmpty && p.isEmpty) {
+      return '';
+    }
+    if (f.isEmpty) {
+      return p;
+    }
+    if (p.isEmpty) {
+      return f;
+    }
+    return '$f $p';
+  }
 
   /// Creates a copy with optional overrides.
   AssistantState copyWith({
@@ -71,7 +91,8 @@ class AssistantState {
     bool? shouldFocusInput,
     Uint8List? selectedImage,
     bool? isInterviewCopilotActive,
-    String? transcriptPreview,
+    String? listenFinalizedText,
+    String? listenPartialText,
     List<AudioInputDevice>? audioDevices,
     String? selectedAudioDeviceId,
     bool clearImage = false,
@@ -85,7 +106,8 @@ class AssistantState {
       selectedImage: clearImage ? null : (selectedImage ?? this.selectedImage),
       isInterviewCopilotActive:
           isInterviewCopilotActive ?? this.isInterviewCopilotActive,
-      transcriptPreview: transcriptPreview ?? this.transcriptPreview,
+      listenFinalizedText: listenFinalizedText ?? this.listenFinalizedText,
+      listenPartialText: listenPartialText ?? this.listenPartialText,
       audioDevices: audioDevices ?? this.audioDevices,
       selectedAudioDeviceId:
           selectedAudioDeviceId ?? this.selectedAudioDeviceId,
@@ -103,7 +125,8 @@ class AssistantState {
           isOverlayVisible == other.isOverlayVisible &&
           shouldFocusInput == other.shouldFocusInput &&
           isInterviewCopilotActive == other.isInterviewCopilotActive &&
-          transcriptPreview == other.transcriptPreview &&
+          listenFinalizedText == other.listenFinalizedText &&
+          listenPartialText == other.listenPartialText &&
           selectedAudioDeviceId == other.selectedAudioDeviceId;
 
   @override
@@ -114,7 +137,8 @@ class AssistantState {
       isOverlayVisible.hashCode ^
       shouldFocusInput.hashCode ^
       isInterviewCopilotActive.hashCode ^
-      transcriptPreview.hashCode ^
+      listenFinalizedText.hashCode ^
+      listenPartialText.hashCode ^
       selectedAudioDeviceId.hashCode;
 }
 
@@ -139,7 +163,10 @@ final aiRepositoryProvider = Provider<AIRepository>((ref) {
 ///
 /// Uses Riverpod 3.x [Notifier] API (replaces the legacy StateNotifier).
 class AssistantNotifier extends Notifier<AssistantState> {
-  // Must not be `late final`: [build] runs again when e.g. [groqClientConfigProvider] resolves.
+  /// Stable id for the in-chat live transcript bubble while copilot is running.
+  static const String kLiveListenMessageId = 'live-listen-draft';
+
+  // Must not be `late final`: [build] runs again when e.g. [clientRuntimeConfigProvider] resolves.
   late WindowService _windowService;
   late AIRepository _aiRepository;
   late ScreenCaptureService _screenCaptureService;
@@ -160,19 +187,21 @@ class AssistantNotifier extends Notifier<AssistantState> {
     ref.listen(authProvider, (prev, next) {
       if (!next.isAuthenticated) {
         _aiRepository.clearGroqRuntimeConfig();
-        ref.invalidate(groqClientConfigProvider);
+        ref.read(deepgramRuntimeHolderProvider).clear();
+        ref.invalidate(clientRuntimeConfigProvider);
       }
     });
 
-    ref.listen(groqClientConfigProvider, (prev, next) {
+    ref.listen(clientRuntimeConfigProvider, (prev, next) {
       next.whenData((config) {
         if (config != null) {
-          _aiRepository.applyGroqRuntimeConfig(config);
+          _aiRepository.applyGroqRuntimeConfig(config.groq);
+          ref.read(deepgramRuntimeHolderProvider).apply(config.deepgram);
         }
       });
     });
 
-    ref.watch(groqClientConfigProvider);
+    ref.watch(clientRuntimeConfigProvider);
 
     // Wire up visibility change callback from WindowService → state sync.
     _windowService.onVisibilityChanged = () {
@@ -289,6 +318,19 @@ class AssistantNotifier extends Notifier<AssistantState> {
     if (state.isInterviewCopilotActive) {
       return;
     }
+    if (!ref.read(deepgramRuntimeHolderProvider).hasKey) {
+      state = state.copyWith(
+        messages: [
+          ...state.messages,
+          ChatMessage.system(
+            'Speech recognition is unavailable: no Deepgram API keys are '
+            'configured for your account. Ask an administrator to add keys, then '
+            'sign out and back in.',
+          ),
+        ],
+      );
+      return;
+    }
     await refreshAudioInputDevices();
     try {
       await _interviewAudioCopilotService.start(
@@ -298,14 +340,17 @@ class AssistantNotifier extends Notifier<AssistantState> {
         onQuestionDetected: _onQuestionDetected,
         onError: _onAudioPipelineError,
       );
+      final messagesWithIntro = [
+        ...state.messages,
+        ChatMessage.system(
+          'Interview copilot on ${_selectedDeviceLabel()}. Live transcript appears below; tap send to ask the assistant.',
+        ),
+      ];
       state = state.copyWith(
         isInterviewCopilotActive: true,
-        messages: [
-          ...state.messages,
-          ChatMessage.system(
-            'Interview copilot listening on ${_selectedDeviceLabel()}.',
-          ),
-        ],
+        listenFinalizedText: '',
+        listenPartialText: '',
+        messages: _upsertLiveListenBubble(messagesWithIntro, '', true),
       );
     } catch (e) {
       state = state.copyWith(
@@ -322,6 +367,19 @@ class AssistantNotifier extends Notifier<AssistantState> {
       await stopInterviewCopilot();
       return;
     }
+    if (!ref.read(deepgramRuntimeHolderProvider).hasKey) {
+      state = state.copyWith(
+        messages: [
+          ...state.messages,
+          ChatMessage.system(
+            'Speech recognition is unavailable: no Deepgram API keys are '
+            'configured for your account. Ask an administrator to add keys, then '
+            'sign out and back in.',
+          ),
+        ],
+      );
+      return;
+    }
     try {
       await _interviewAudioCopilotService.startSystemAudio(
         onPartialTranscript: _onPartialTranscript,
@@ -329,14 +387,17 @@ class AssistantNotifier extends Notifier<AssistantState> {
         onQuestionDetected: _onQuestionDetected,
         onError: _onAudioPipelineError,
       );
+      final messagesWithIntro = [
+        ...state.messages,
+        ChatMessage.system(
+          'Speaker copilot: live transcript below (Meet, Zoom, browser, etc.). Tap send to ask the assistant.',
+        ),
+      ];
       state = state.copyWith(
         isInterviewCopilotActive: true,
-        messages: [
-          ...state.messages,
-          ChatMessage.system(
-            'Listening to system speaker output (Meet, Zoom, browser, Translate).',
-          ),
-        ],
+        listenFinalizedText: '',
+        listenPartialText: '',
+        messages: _upsertLiveListenBubble(messagesWithIntro, '', true),
       );
     } catch (e) {
       state = state.copyWith(
@@ -353,22 +414,85 @@ class AssistantNotifier extends Notifier<AssistantState> {
       return;
     }
     await _interviewAudioCopilotService.stop();
+    final withoutLive = state.messages
+        .where((m) => m.id != AssistantNotifier.kLiveListenMessageId)
+        .toList();
     state = state.copyWith(
       isInterviewCopilotActive: false,
-      transcriptPreview: '',
+      listenFinalizedText: '',
+      listenPartialText: '',
       messages: [
-        ...state.messages,
+        ...withoutLive,
         ChatMessage.system('Interview copilot stopped.'),
       ],
     );
   }
 
+  String _composeListenDraft(String finalized, String partial) {
+    final f = finalized.trim();
+    final p = partial.trim();
+    if (f.isEmpty && p.isEmpty) {
+      return '';
+    }
+    if (f.isEmpty) {
+      return p;
+    }
+    if (p.isEmpty) {
+      return f;
+    }
+    return '$f $p';
+  }
+
+  List<ChatMessage> _upsertLiveListenBubble(
+    List<ChatMessage> messages,
+    String draftDisplay,
+    bool hasPartialInFlight,
+  ) {
+    final trimmed = draftDisplay.trim();
+    final body = trimmed.isEmpty ? '(Listening…)' : trimmed;
+    final out = List<ChatMessage>.from(messages);
+    final idx = out.indexWhere((m) => m.id == kLiveListenMessageId);
+    final bubble = ChatMessage(
+      id: kLiveListenMessageId,
+      role: MessageRole.user,
+      content: body,
+      isStreaming: trimmed.isEmpty || hasPartialInFlight,
+    );
+    if (idx >= 0) {
+      out[idx] = bubble;
+    } else {
+      out.add(bubble);
+    }
+    return out;
+  }
+
+  void _applyListenTranscript({String? finalized, String? partial}) {
+    final newF = finalized ?? state.listenFinalizedText;
+    final newP = partial ?? state.listenPartialText;
+    final draft = _composeListenDraft(newF, newP);
+    state = state.copyWith(
+      listenFinalizedText: newF,
+      listenPartialText: newP,
+      messages: _upsertLiveListenBubble(
+        state.messages,
+        draft,
+        newP.trim().isNotEmpty,
+      ),
+    );
+  }
+
   void _onPartialTranscript(String partial) {
-    state = state.copyWith(transcriptPreview: partial);
+    _applyListenTranscript(partial: partial);
   }
 
   void _onFinalTranscript(String finalText) {
-    state = state.copyWith(transcriptPreview: finalText);
+    final trimmed = finalText.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final prev = state.listenFinalizedText.trim();
+    final newF = prev.isEmpty ? trimmed : '$prev $trimmed';
+    _applyListenTranscript(finalized: newF, partial: '');
   }
 
   Future<void> _onQuestionDetected(question) async {
@@ -376,11 +500,34 @@ class AssistantNotifier extends Notifier<AssistantState> {
       messages: [
         ...state.messages,
         ChatMessage.system(
-          'Detected question (${(question.confidence * 100).toStringAsFixed(0)}%): ${question.text}',
+          'Question detected (${(question.confidence * 100).toStringAsFixed(0)}%): ${question.text} — tap send to ask the assistant.',
         ),
       ],
     );
-    await sendMessage(question.text);
+  }
+
+  /// Sends the accumulated live transcript while copilot is active.
+  Future<void> sendListenDraft() async {
+    if (!state.isInterviewCopilotActive) {
+      return;
+    }
+    final draft = state.listenDraftDisplay.trim();
+    if (draft.isEmpty) {
+      return;
+    }
+    final withoutLive =
+        state.messages.where((m) => m.id != kLiveListenMessageId).toList();
+    state = state.copyWith(
+      messages: withoutLive,
+      listenFinalizedText: '',
+      listenPartialText: '',
+    );
+    await sendMessage(draft);
+    if (state.isInterviewCopilotActive) {
+      state = state.copyWith(
+        messages: _upsertLiveListenBubble(state.messages, '', true),
+      );
+    }
   }
 
   void _onAudioPipelineError(Object e) {
@@ -448,7 +595,9 @@ class AssistantNotifier extends Notifier<AssistantState> {
       text.trim(),
       imageData: state.selectedImage,
     );
-    final history = List<ChatMessage>.from(state.messages);
+    final history = List<ChatMessage>.from(
+      state.messages.where((m) => m.id != kLiveListenMessageId),
+    );
 
     state = state.copyWith(
       messages: [...state.messages, userMessage],

@@ -107,7 +107,7 @@ class MessageBubble extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              'AI Assistant',
+                              'Flowdesk',
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     color: AppColors.primary.withValues(

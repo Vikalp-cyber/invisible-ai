@@ -8,13 +8,16 @@ import '../features/assistant/domain/models/transcription_event.dart';
 class WindowsSpeechService {
   WindowsSpeechService()
       : _methodChannel = const MethodChannel(_methodChannelName),
-        _eventChannel = const EventChannel(_eventChannelName);
+        _eventChannel = const EventChannel(_eventChannelName),
+        _pcmEventChannel = const EventChannel(_pcmEventChannelName);
 
   static const String _methodChannelName = 'invisible_ai_assistant/windows_speech_method';
   static const String _eventChannelName = 'invisible_ai_assistant/windows_speech_events';
+  static const String _pcmEventChannelName = 'invisible_ai_assistant/windows_loopback_pcm_events';
 
   final MethodChannel _methodChannel;
   final EventChannel _eventChannel;
+  final EventChannel _pcmEventChannel;
   StreamSubscription<dynamic>? _subscription;
 
   Future<List<AudioInputDevice>> listInputDevices() async {
@@ -51,7 +54,19 @@ class WindowsSpeechService {
     await _methodChannel.invokeMethod<void>('startSystemAudioListening');
   }
 
+  /// WASAPI loopback → **mono PCM s16le @ 16 kHz** chunks (for Deepgram live listen).
+  Stream<dynamic> get loopbackPcmStream => _pcmEventChannel.receiveBroadcastStream();
+
+  Future<void> startLoopbackPcm() async {
+    await _methodChannel.invokeMethod<void>('startLoopbackPcm');
+  }
+
+  Future<void> stopLoopbackPcm() async {
+    await _methodChannel.invokeMethod<void>('stopLoopbackPcm');
+  }
+
   Future<void> stopListening() async {
+    await stopLoopbackPcm();
     await _methodChannel.invokeMethod<void>('stopListening');
     await _subscription?.cancel();
     _subscription = null;

@@ -1,14 +1,14 @@
-; Invisible AI Assistant — production installer
+; Flowdesk — production installer
 ;
 ; Version is supplied at compile time (required for release builds):
 ;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\invisible_ai_assistant.iss /DMyAppVersion=1.2.3
 ;
 ; GitHub Actions: strip a leading "v" from the tag and pass the same /D switch.
 
-#define MyAppName "Invisible AI Assistant"
+#define MyAppName "Flowdesk"
 #define MyAppExeName "invisible_ai_assistant.exe"
-#define MyAppPublisher "Invisible AI"
-#define MyAppURL "https://github.com/Vikalp-cyber/invisible-ai"
+#define MyAppPublisher "Flowdesk"
+#define MyAppURL "https://github.com/LuminoAi/invisible-ai"
 
 ; Default for local compiles only — release builds must pass /DMyAppVersion=x.y.z
 #ifndef MyAppVersion

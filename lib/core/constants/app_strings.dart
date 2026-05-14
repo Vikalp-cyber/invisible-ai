@@ -4,8 +4,8 @@ class AppStrings {
   AppStrings._();
 
   // ── App Identity ───────────────────────────────────────────────────────────
-  static const String appTitle = 'Invisible AI';
-  static const String appSubtitle = 'Your AI Assistant';
+  static const String appTitle = 'Flowdesk';
+  static const String appSubtitle = 'Your AI assistant overlay';
 
   // ── Input ──────────────────────────────────────────────────────────────────
   static const String inputPlaceholder = 'Type a message...';
@@ -33,7 +33,7 @@ class AppStrings {
 
   // ── Welcome Message ────────────────────────────────────────────────────────
   static const String welcomeMessage =
-      'Hello! I\'m your Invisible AI assistant. I can help you with coding, '
+      'Hello! I\'m Flowdesk. I can help you with coding, '
       'writing, analysis, and more. What would you like to explore today?';
 
   // ── Interview Copilot Style Prompt ─────────────────────────────────────────
@@ -66,11 +66,11 @@ Preferred style:
 ''';
 
   // ── System Tray ────────────────────────────────────────────────────────────
-  static const String trayShowWindow = 'Show Invisible AI';
+  static const String trayShowWindow = 'Show Flowdesk';
   static const String trayNewChat = 'New Chat';
   static const String trayToggleAlwaysOnTop = 'Toggle Always on Top';
   static const String trayQuit = 'Quit';
-  static const String trayMinimizedNotice = 'Invisible AI is still running in the background.';
+  static const String trayMinimizedNotice = 'Flowdesk is still running in the background.';
 
   // ── Hotkey ──────────────────────────────────────────────────────────────────
   static const String hotkeyToggleOverlay = 'Toggle Overlay (Ctrl+Shift+Space)';

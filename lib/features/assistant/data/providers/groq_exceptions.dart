@@ -15,7 +15,8 @@ class GroqApiException implements Exception {
   String toString() => 'GroqApiException($statusCode): $body';
 }
 
-/// 429 — rate-limited. Retry with the next key.
+/// 429 — rate-limited, plus **402 / 408** (quota / capacity) when Groq returns them.
+/// Retry with the next API key when the pool has more than one key.
 class GroqRateLimitException extends GroqApiException {
   GroqRateLimitException(super.statusCode, super.body);
 

@@ -4,9 +4,14 @@ class DesktopOAuthConfig {
   final String refreshPath;
   final String mePath;
   final String logoutPath;
-  /// Authenticated (user access token) endpoint returning resolved Groq key + models.
+  /// Authenticated (user access token) endpoint returning resolved Groq + optional
+  /// Deepgram keys (`GET /api/client-config`). Same Bearer as other user routes.
+  ///
+  /// Legacy shape (Groq only, flat JSON): set [clientConfigPath] to `/api/groq/client-config`
+  /// or compile with `GROQ_CLIENT_CONFIG_PATH` (used when `CLIENT_CONFIG_PATH` is unset).
+  ///
   /// Not the admin `/api/admin/groq-keys` API — that must never ship in the client.
-  final String groqClientConfigPath;
+  final String clientConfigPath;
   final String accessTokenParam;
   final String refreshTokenParam;
   final String userParam;
@@ -22,7 +27,7 @@ class DesktopOAuthConfig {
     required this.refreshPath,
     required this.mePath,
     required this.logoutPath,
-    required this.groqClientConfigPath,
+    required this.clientConfigPath,
     required this.accessTokenParam,
     required this.refreshTokenParam,
     required this.userParam,
@@ -34,28 +39,33 @@ class DesktopOAuthConfig {
   });
 
   factory DesktopOAuthConfig.fromEnvironment() {
-    return const DesktopOAuthConfig(
-      baseUrl: String.fromEnvironment(
+    const clientPathEnv = String.fromEnvironment('CLIENT_CONFIG_PATH');
+    const legacyGroqPathEnv = String.fromEnvironment('GROQ_CLIENT_CONFIG_PATH');
+    final resolvedClientConfigPath = clientPathEnv.isNotEmpty
+        ? clientPathEnv
+        : (legacyGroqPathEnv.isNotEmpty
+              ? legacyGroqPathEnv
+              : '/api/client-config');
+
+    return DesktopOAuthConfig(
+      baseUrl: const String.fromEnvironment(
         'API_BASE_URL',
-        defaultValue: 'https://invisible-ai-backend-5f7x.onrender.com',
+        defaultValue: 'https://flowdesk-backend.luminoai.online',
       ),
-      googleAuthPath: String.fromEnvironment(
+      googleAuthPath: const String.fromEnvironment(
         'AUTH_GOOGLE_PATH',
         defaultValue: '/api/auth/google',
       ),
-      refreshPath: String.fromEnvironment(
+      refreshPath: const String.fromEnvironment(
         'AUTH_REFRESH_PATH',
         defaultValue: '/api/auth/refresh',
       ),
-      mePath: String.fromEnvironment(
+      mePath: const String.fromEnvironment(
         'AUTH_ME_PATH',
         defaultValue: '/api/auth/me',
       ),
-      logoutPath: String.fromEnvironment('AUTH_LOGOUT_PATH', defaultValue: ''),
-      groqClientConfigPath: String.fromEnvironment(
-        'GROQ_CLIENT_CONFIG_PATH',
-        defaultValue: '/api/groq/client-config',
-      ),
+      logoutPath: const String.fromEnvironment('AUTH_LOGOUT_PATH', defaultValue: ''),
+      clientConfigPath: resolvedClientConfigPath,
       accessTokenParam: String.fromEnvironment(
         'AUTH_ACCESS_TOKEN_PARAM',
         defaultValue: 'accessToken',
@@ -70,7 +80,7 @@ class DesktopOAuthConfig {
       ),
       callbackHost: String.fromEnvironment(
         'AUTH_CALLBACK_HOST',
-        defaultValue: 'invisible-ai-backend-5f7x.onrender.com',
+        defaultValue: 'flowdesk-backend.luminoai.online',
       ),
       callbackPort: int.fromEnvironment(
         'AUTH_CALLBACK_PORT',

@@ -147,7 +147,7 @@ void main() async {
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: const InvisibleAIApp(),
+      child: const FlowdeskApp(),
     ),
   );
 }

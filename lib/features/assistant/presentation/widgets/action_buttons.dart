@@ -3,21 +3,26 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../services/app_update_service.dart';
 import '../../data/providers/groq_config_providers.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../overlay/domain/models/overlay_layout_state.dart';
-import '../../../overlay/domain/models/overlay_mode.dart';
-import '../../../overlay/presentation/providers/overlay_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/assistant_provider.dart';
 import '../../../../core/providers/common_providers.dart';
 import '../../../usage/presentation/providers/usage_provider.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
+import '../../domain/models/client_config_exception.dart';
+import '../../domain/models/groq_runtime_config.dart';
+
+String _clientConfigLoadErrorMessage(Object error) {
+  if (error is ClientConfigException) {
+    return error.message;
+  }
+  return error.toString();
+}
 
 /// ── Action Buttons ─────────────────────────────────────────────────────────
 /// A horizontal row of quick-action icon buttons between the response area
@@ -33,7 +38,6 @@ class ActionButtons extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(assistantProvider.notifier);
-    final overlayNotifier = ref.read(overlayProvider.notifier);
 
     return Container(
       height: AppConstants.actionBarHeight,
@@ -209,176 +213,6 @@ class ActionButtons extends ConsumerWidget {
   /// Shows the settings dialog to configure AI providers and API keys.
   void _showSettingsDialog(BuildContext context, WidgetRef ref) {
     showDialog(context: context, builder: (ctx) => const _SettingsDialog());
-  }
-
-  void _showAudioRouteSetupDialog(
-    BuildContext context,
-    AssistantNotifier notifier,
-  ) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.backgroundMedium,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppConstants.cardBorderRadius),
-          side: const BorderSide(color: AppColors.glassBorder, width: 1),
-        ),
-        title: const Text(
-          'Google Meet Audio Setup',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: const Text(
-          'Best practical path: route Meet output to VB-CABLE Input, then use '
-          'VB-CABLE Output as app input device. You can inject the full setup '
-          'guide into chat and open Windows Sound settings.',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              final opened = await notifier.openWindowsSoundSettings();
-              if (!context.mounted) {
-                return;
-              }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    opened
-                        ? 'Opened Windows sound settings'
-                        : 'Could not open sound settings',
-                  ),
-                ),
-              );
-            },
-            child: const Text(
-              'Open Sound Settings',
-              style: TextStyle(color: AppColors.textMuted),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              await notifier.addVirtualCableSetupGuide();
-              if (!ctx.mounted) {
-                return;
-              }
-              Navigator.of(ctx).pop();
-            },
-            child: const Text(
-              'Send Guide to Chat',
-              style: TextStyle(color: AppColors.primary),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showInterviewCopilotDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (ctx) => const _InterviewCopilotDialog(),
-    );
-  }
-}
-
-class _InterviewCopilotDialog extends ConsumerStatefulWidget {
-  const _InterviewCopilotDialog();
-
-  @override
-  ConsumerState<_InterviewCopilotDialog> createState() =>
-      _InterviewCopilotDialogState();
-}
-
-class _InterviewCopilotDialogState
-    extends ConsumerState<_InterviewCopilotDialog> {
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(
-      () => ref.read(assistantProvider.notifier).refreshAudioInputDevices(),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(assistantProvider);
-    final notifier = ref.read(assistantProvider.notifier);
-
-    return AlertDialog(
-      backgroundColor: AppColors.backgroundDark,
-      title: const Text(
-        'Interview Copilot Audio',
-        style: TextStyle(color: AppColors.textPrimary),
-      ),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Input device (select VB-CABLE Output)',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 8),
-            DropdownButton<String>(
-              value: state.selectedAudioDeviceId,
-              isExpanded: true,
-              dropdownColor: AppColors.surface,
-              style: const TextStyle(color: AppColors.textPrimary),
-              items: state.audioDevices
-                  .map(
-                    (d) => DropdownMenuItem<String>(
-                      value: d.id,
-                      child: Text(
-                        d.isVirtualCable ? '${d.label}  [VB-CABLE]' : d.label,
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) => notifier.selectAudioInputDevice(value),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              state.transcriptPreview.isEmpty
-                  ? 'Transcript preview will appear here...'
-                  : state.transcriptPreview,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => notifier.refreshAudioInputDevices(),
-          child: const Text('Refresh Devices'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            if (state.isInterviewCopilotActive) {
-              await notifier.stopInterviewCopilot();
-            } else {
-              await notifier.startInterviewCopilot();
-            }
-            if (mounted) {
-              setState(() {});
-            }
-          },
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-          child: Text(state.isInterviewCopilotActive ? 'Stop' : 'Start'),
-        ),
-      ],
-    );
   }
 }
 
@@ -716,18 +550,35 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                 );
               }
-              final options = config.models;
+              var options = List<GroqModelOption>.from(config.models);
+              if (options.isEmpty) {
+                final id = GroqModelIds.canonicalize(config.chatModel);
+                if (id != null) {
+                  options = [GroqModelOption(id: id)];
+                }
+              }
               if (options.isEmpty) {
                 return const Text(
                   'The server returned no Groq models.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                 );
               }
-              final saved = prefs.getString(AppConstants.keyGroqModelId);
-              final validSaved =
-                  saved.isNotEmpty && options.any((m) => m.id == saved);
+              final saved = prefs.getString(AppConstants.keyGroqModelId).trim();
+              final savedCanon = GroqModelIds.canonicalize(saved);
+              final validSaved = saved.isNotEmpty &&
+                  options.any(
+                    (m) =>
+                        m.id == saved ||
+                        (savedCanon != null && m.id == savedCanon),
+                  );
               var selected = validSaved
-                  ? saved
+                  ? options
+                      .firstWhere(
+                        (m) =>
+                            m.id == saved ||
+                            (savedCanon != null && m.id == savedCanon),
+                      )
+                      .id
                   : (config.resolvedDefaultModelId ?? options.first.id);
               if (!options.any((m) => m.id == selected)) {
                 selected = options.first.id;
@@ -774,7 +625,7 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
             },
             loading: () => const LinearProgressIndicator(minHeight: 2),
             error: (e, _) => Text(
-              'Could not load Groq settings: $e',
+              'Could not load server configuration: ${_clientConfigLoadErrorMessage(e)}',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
           ),
@@ -796,7 +647,7 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
         ),
         _buildSettingToggle(
           'Start with Windows',
-          'Launch Invisible AI automatically when you sign in',
+          'Launch Flowdesk automatically when you sign in',
           false,
           (val) {},
         ),
@@ -850,7 +701,7 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppColors.primary,
+            activeThumbColor: AppColors.primary,
           ),
         ],
       ),
@@ -991,26 +842,8 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
             ],
           ),
         ),
-        const SizedBox(height: 24),
-        Center(
-          child: ElevatedButton(
-            onPressed: () {
-              // Placeholder for upgrade URL
-              launchUrl(Uri.parse('https://example.com/upgrade'));
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-              foregroundColor: AppColors.primary,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: AppColors.primary, width: 1),
-              ),
-            ),
-            child: const Text('Upgrade Plan'),
-          ),
-        ),
+        // Upgrade Plan (temporarily disabled). Re-add `SizedBox` + `Center` +
+        // `ElevatedButton` calling `_showUpgradePlanDialog` from git history when needed.
       ],
     );
   }
@@ -1023,7 +856,7 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
         Image.asset('assets/app_icon.png', width: 80, height: 80),
         const SizedBox(height: 16),
         const Text(
-          'Invisible AI Assistant',
+          'Flowdesk',
           style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const Text(
@@ -1032,7 +865,7 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
         ),
         const SizedBox(height: 40),
         const Text(
-          '© 2024 Vikalp Cyber. All rights reserved.',
+          '© 2024 LuminoAi. All rights reserved.',
           style: TextStyle(color: AppColors.textMuted, fontSize: 11),
         ),
       ],

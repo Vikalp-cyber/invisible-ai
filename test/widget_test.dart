@@ -1,4 +1,4 @@
-// Basic smoke test for the Invisible AI Assistant app.
+// Basic smoke test for the Flowdesk app.
 //
 // Note: Full widget testing requires mocking window_manager and bitsdojo_window
 // platform channels, which is beyond the scope of this initial setup.
@@ -22,11 +22,11 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [authProvider.overrideWith(_TestAuthNotifier.new)],
-        child: InvisibleAIApp(),
+        child: FlowdeskApp(),
       ),
     );
 
-    expect(find.text('Invisible AI Assistant'), findsOneWidget);
+    expect(find.text('Flowdesk'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
   });
 }

@@ -7,11 +7,11 @@ import 'features/assistant/presentation/screens/assistant_screen.dart';
 import 'features/auth/presentation/providers/auth_provider.dart';
 import 'features/auth/presentation/screens/sign_in_screen.dart';
 
-/// ── Invisible AI App ───────────────────────────────────────────────────────
+/// ── Flowdesk app root ───────────────────────────────────────────────────────
 /// Root MaterialApp with dark futuristic theme and transparent background.
 /// No debug banner. Home screen is the floating assistant overlay.
-class InvisibleAIApp extends ConsumerWidget {
-  const InvisibleAIApp({super.key});
+class FlowdeskApp extends ConsumerWidget {
+  const FlowdeskApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

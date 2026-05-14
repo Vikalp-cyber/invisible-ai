@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'deepgram_runtime_provider.dart';
 import '../../../services/preference_service.dart';
 import '../../../services/secure_storage_service.dart';
 import '../../../services/window_service.dart';
@@ -31,7 +32,11 @@ final virtualAudioCableServiceProvider = Provider<VirtualAudioCableService>((ref
 
 /// Singleton provider for the InterviewAudioCopilotService.
 final interviewAudioCopilotServiceProvider = Provider<InterviewAudioCopilotService>((ref) {
-  final service = InterviewAudioCopilotService();
+  final service = InterviewAudioCopilotService(
+    resolveDeepgramHolder: () => ref.read(deepgramRuntimeHolderProvider),
+    resolveDeepgramListenBaseUrl: () =>
+        ref.read(deepgramRuntimeHolderProvider).listenBaseUrl,
+  );
   ref.onDispose(() {
     service.dispose();
   });

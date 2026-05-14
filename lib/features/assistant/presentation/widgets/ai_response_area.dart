@@ -56,7 +56,9 @@ class _AIResponseAreaState extends ConsumerState<AIResponseArea> {
     // Trigger auto-scroll whenever messages change or typing state changes.
     ref.listen<AssistantState>(assistantProvider, (previous, next) {
       if (previous?.messages.length != next.messages.length ||
-          previous?.isTyping != next.isTyping) {
+          previous?.isTyping != next.isTyping ||
+          previous?.listenFinalizedText != next.listenFinalizedText ||
+          previous?.listenPartialText != next.listenPartialText) {
         _scrollToBottom();
       }
     });

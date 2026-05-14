@@ -48,9 +48,16 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
     super.dispose();
   }
 
-  /// Sends the current message and clears the input.
+  /// Sends typed text, or while interview/speaker copilot is on with an empty
+  /// field, sends the live transcript draft.
   void _sendMessage() {
+    final copilot = ref.read(assistantProvider).isInterviewCopilotActive;
+    final listenDraft = ref.read(assistantProvider).listenDraftDisplay.trim();
     final text = _controller.text.trim();
+    if (copilot && text.isEmpty && listenDraft.isNotEmpty) {
+      ref.read(assistantProvider.notifier).sendListenDraft();
+      return;
+    }
     if (text.isEmpty) return;
 
     ref.read(assistantProvider.notifier).sendMessage(text);
@@ -65,6 +72,12 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
     );
     final selectedImage = ref.watch(
       assistantProvider.select((state) => state.selectedImage),
+    );
+    final copilotActive = ref.watch(
+      assistantProvider.select((state) => state.isInterviewCopilotActive),
+    );
+    final listenDraft = ref.watch(
+      assistantProvider.select((state) => state.listenDraftDisplay),
     );
 
     // ── Auto-Focus Management ──────────────────────────────────────────────
@@ -204,15 +217,26 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
           const SizedBox(width: 12),
 
           // ── Send Button ────────────────────────────────────────────────────
-          _buildSendButton(isTyping, selectedImage != null),
+          _buildSendButton(
+            isTyping,
+            selectedImage != null,
+            copilotActive,
+            listenDraft.trim().isNotEmpty,
+          ),
         ],
       ),
     );
   }
 
   /// Animated send button that activates when text is entered, or shows Stop when typing.
-  Widget _buildSendButton(bool isTyping, bool hasImage) {
-    final isActive = _hasText || hasImage || isTyping;
+  Widget _buildSendButton(
+    bool isTyping,
+    bool hasImage,
+    bool copilotActive,
+    bool hasListenDraft,
+  ) {
+    final isActive =
+        _hasText || hasImage || isTyping || (copilotActive && hasListenDraft);
 
     return MouseRegion(
       cursor: isActive ? SystemMouseCursors.click : SystemMouseCursors.basic,
