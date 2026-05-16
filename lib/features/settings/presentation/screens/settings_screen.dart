@@ -309,7 +309,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 48),
         const Text('© 2024 LuminoAi. All rights reserved.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
         const SizedBox(height: 8),
-        const Text('Version 1.0.0', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+        const Text('Version 1.0.1', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
       ],
     );
   }

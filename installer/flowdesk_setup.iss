@@ -7,8 +7,8 @@
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
 AppId={{BE275555-F8E5-47ED-A637-DE76FF707A8C}
 AppName=FlowDesk
-AppVersion=1.0.0
-;AppVerName=FlowDesk 1.0.0
+AppVersion=1.0.1
+;AppVerName=FlowDesk 1.0.1
 AppPublisher=My Company, Inc.
 AppPublisherURL=https://www.example.com/
 AppSupportURL=https://www.example.com/

@@ -7,8 +7,8 @@
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
 AppId={{44CF766A-5D38-439A-8442-D94BF660E581}
 AppName=Invisible_meet_ai
-AppVersion=1.0.0
-;AppVerName=Invisible_meet_ai 1.0.0
+AppVersion=1.0.1
+;AppVerName=Invisible_meet_ai 1.0.1
 AppPublisher=My Company, Inc.
 AppPublisherURL=https://www.example.com/
 AppSupportURL=https://www.example.com/
