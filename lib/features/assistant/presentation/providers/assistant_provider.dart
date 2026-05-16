@@ -350,7 +350,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
         isInterviewCopilotActive: true,
         listenFinalizedText: '',
         listenPartialText: '',
-        messages: _upsertLiveListenBubble(messagesWithIntro, '', true),
+        messages: messagesWithIntro,
       );
     } catch (e) {
       state = state.copyWith(
@@ -397,7 +397,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
         isInterviewCopilotActive: true,
         listenFinalizedText: '',
         listenPartialText: '',
-        messages: _upsertLiveListenBubble(messagesWithIntro, '', true),
+        messages: messagesWithIntro,
       );
     } catch (e) {
       state = state.copyWith(
@@ -443,41 +443,14 @@ class AssistantNotifier extends Notifier<AssistantState> {
     return '$f $p';
   }
 
-  List<ChatMessage> _upsertLiveListenBubble(
-    List<ChatMessage> messages,
-    String draftDisplay,
-    bool hasPartialInFlight,
-  ) {
-    final trimmed = draftDisplay.trim();
-    final body = trimmed.isEmpty ? '(Listening…)' : trimmed;
-    final out = List<ChatMessage>.from(messages);
-    final idx = out.indexWhere((m) => m.id == kLiveListenMessageId);
-    final bubble = ChatMessage(
-      id: kLiveListenMessageId,
-      role: MessageRole.user,
-      content: body,
-      isStreaming: trimmed.isEmpty || hasPartialInFlight,
-    );
-    if (idx >= 0) {
-      out[idx] = bubble;
-    } else {
-      out.add(bubble);
-    }
-    return out;
-  }
+
 
   void _applyListenTranscript({String? finalized, String? partial}) {
     final newF = finalized ?? state.listenFinalizedText;
     final newP = partial ?? state.listenPartialText;
-    final draft = _composeListenDraft(newF, newP);
     state = state.copyWith(
       listenFinalizedText: newF,
       listenPartialText: newP,
-      messages: _upsertLiveListenBubble(
-        state.messages,
-        draft,
-        newP.trim().isNotEmpty,
-      ),
     );
   }
 
@@ -506,29 +479,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
     );
   }
 
-  /// Sends the accumulated live transcript while copilot is active.
-  Future<void> sendListenDraft() async {
-    if (!state.isInterviewCopilotActive) {
-      return;
-    }
-    final draft = state.listenDraftDisplay.trim();
-    if (draft.isEmpty) {
-      return;
-    }
-    final withoutLive =
-        state.messages.where((m) => m.id != kLiveListenMessageId).toList();
-    state = state.copyWith(
-      messages: withoutLive,
-      listenFinalizedText: '',
-      listenPartialText: '',
-    );
-    await sendMessage(draft);
-    if (state.isInterviewCopilotActive) {
-      state = state.copyWith(
-        messages: _upsertLiveListenBubble(state.messages, '', true),
-      );
-    }
-  }
+
 
   void _onAudioPipelineError(Object e) {
     state = state.copyWith(
@@ -603,6 +554,8 @@ class AssistantNotifier extends Notifier<AssistantState> {
       messages: [...state.messages, userMessage],
       isTyping: true,
       clearImage: true,
+      listenFinalizedText: '',
+      listenPartialText: '',
     );
 
     await _startStreamingResponse(
