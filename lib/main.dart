@@ -83,6 +83,7 @@ void main() async {
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.setAlwaysOnTop(true);
     await windowManager.setAsFrameless();
+    await windowManager.setMinimumSize(AppConstants.minimumWindowSize);
     // Enable close interception — close hides to tray instead of quitting.
     await windowManager.setPreventClose(true);
     await windowManager.show();

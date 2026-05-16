@@ -7,14 +7,14 @@ class AppConstants {
   AppConstants._();
 
   // ── Window Defaults ────────────────────────────────────────────────────────
-  /// Default window dimensions — compact floating panel size.
-  static const Size defaultWindowSize = Size(400, 580);
+  /// Default window dimensions.
+  static const Size defaultWindowSize = Size(800, 600);
 
   /// Minimum allowed window size to prevent content from breaking.
-  static const Size minimumWindowSize = Size(340, 480);
+  static const Size minimumWindowSize = Size(800, 600);
 
   /// Maximum window size cap.
-  static const Size maximumWindowSize = Size(600, 900);
+  static const Size maximumWindowSize = Size(1200, 900);
 
   // ── Border Radius ──────────────────────────────────────────────────────────
   /// Main window corner radius for the floating panel look.

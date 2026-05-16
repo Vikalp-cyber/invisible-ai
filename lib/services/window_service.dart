@@ -92,6 +92,7 @@ class WindowService with WindowListener {
       await windowManager.setPosition(windowPosition);
       await windowManager.setAlwaysOnTop(_isAlwaysOnTop);
       await windowManager.setAsFrameless();
+      await windowManager.setMinimumSize(AppConstants.minimumWindowSize);
       // Enable close interception — close button hides to tray.
       await windowManager.setPreventClose(true);
       await windowManager.show();
