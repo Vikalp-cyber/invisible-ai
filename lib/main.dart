@@ -40,8 +40,18 @@ void main() async {
 
   // ── Single-Instance Check ───────────────────────────────────────────────
   // Use a lock file to prevent multiple instances from running.
-  if (!await _acquireSingleInstanceLock()) {
-    debugPrint('Another instance is already running. Exiting.');
+  // Dev: pass --dart-define=FLOWDESK_SKIP_SINGLE_INSTANCE=true when a tray
+  // instance is already running and you need `flutter run` without quitting it.
+  const skipSingleInstance = bool.fromEnvironment(
+    'FLOWDESK_SKIP_SINGLE_INSTANCE',
+    defaultValue: false,
+  );
+  if (!skipSingleInstance && !await _acquireSingleInstanceLock()) {
+    debugPrint(
+      'Another Flowdesk instance is already running (check the system tray). '
+      'Quit it before starting again, or use '
+      '--dart-define=FLOWDESK_SKIP_SINGLE_INSTANCE=true for local debugging.',
+    );
     exit(0);
   }
 

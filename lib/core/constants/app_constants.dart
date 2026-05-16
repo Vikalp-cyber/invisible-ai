@@ -79,6 +79,21 @@ class AppConstants {
   /// Persisted Groq model id only (never the API key).
   static const String keyGroqModelId = 'groq_model_id';
 
+  /// Premium unlocked after successful Razorpay verification (local hint only).
+  static const String keyPremiumActive = 'premium_active';
+
+  /// ISO-8601 timestamp of last successful payment verification.
+  static const String keyPremiumVerifiedAt = 'premium_verified_at';
+
+  /// `POST /api/payments/create-link` body field (must match `GET /api/pricing/plans`).
+  static const String premiumPlanType = 'lifetime';
+
+  /// Poll `GET /api/subscription/status` while user pays in the browser.
+  static const Duration subscriptionPollInterval = Duration(seconds: 5);
+
+  /// Stop polling after this duration (user may still complete payment later).
+  static const Duration subscriptionPollTimeout = Duration(minutes: 5);
+
   // ── AI Mock Delay ──────────────────────────────────────────────────────────
   /// Simulated AI thinking time range.
   static const Duration mockMinDelay = Duration(milliseconds: 800);

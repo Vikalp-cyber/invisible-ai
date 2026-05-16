@@ -36,18 +36,20 @@ class UsageState {
 }
 
 class UsageNotifier extends Notifier<UsageState> {
-  late final UsageRepository _repository;
+  // Do not use `late final` here — [build] can run again when dependencies change.
+  UsageRepository get _repository => ref.read(usageRepositoryProvider);
 
   @override
   UsageState build() {
-    _repository = ref.watch(usageRepositoryProvider);
-
-    // Watch auth state. If user becomes authenticated, fetch usage.
-    final authState = ref.watch(authProvider);
-    if (authState.isAuthenticated) {
-      // Defer to avoid state update during build
-      Future.microtask(() => refreshUsage());
-    }
+    ref.listen(authProvider, (previous, next) {
+      if (next.isAuthenticated) {
+        if (previous?.isAuthenticated != true) {
+          Future.microtask(() => refreshUsage());
+        }
+      } else {
+        state = const UsageState();
+      }
+    });
 
     return const UsageState();
   }

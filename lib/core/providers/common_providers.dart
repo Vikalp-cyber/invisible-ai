@@ -8,11 +8,24 @@ import '../../../services/hotkey_service.dart';
 import '../../../services/tray_service.dart';
 import '../../../services/virtual_audio_cable_service.dart';
 import '../../../services/interview_audio_copilot_service.dart';
+import '../../../services/payment_service.dart';
 import '../../../services/screen_capture_service.dart';
+import '../../features/auth/data/providers/auth_data_providers.dart';
+import '../../features/payments/data/providers/payment_providers.dart';
 
 /// Singleton provider for the PreferenceService.
 final preferenceServiceProvider = Provider<PreferenceService>((ref) {
   return PreferenceService();
+});
+
+/// Razorpay upgrade flow (browser checkout + subscription polling on Windows).
+final paymentServiceProvider = Provider<PaymentService>((ref) {
+  return PaymentService(
+    repository: ref.watch(paymentRepositoryProvider),
+    preferences: ref.watch(preferenceServiceProvider),
+    authRemote: ref.watch(authRemoteDataSourceProvider),
+    sessionManager: ref.watch(authSessionManagerProvider),
+  );
 });
 
 /// Singleton provider for the SecureStorageService.

@@ -59,16 +59,20 @@ class OverlayState {
 }
 
 class OverlayNotifier extends Notifier<OverlayState> {
-  late final WorkspaceMemoryStore _workspaceStore;
-  late final SmartLayoutManager _layoutManager;
-  late final WindowOrchestrator _orchestrator;
   Timer? _autoHideTimer;
+
+  WorkspaceMemoryStore get _workspaceStore =>
+      ref.read(workspaceMemoryStoreProvider);
+
+  SmartLayoutManager get _layoutManager => ref.read(smartLayoutManagerProvider);
+
+  WindowOrchestrator get _orchestrator => ref.read(windowOrchestratorProvider);
 
   @override
   OverlayState build() {
-    _workspaceStore = ref.watch(workspaceMemoryStoreProvider);
-    _layoutManager = ref.watch(smartLayoutManagerProvider);
-    _orchestrator = ref.watch(windowOrchestratorProvider);
+    ref.watch(workspaceMemoryStoreProvider);
+    ref.watch(smartLayoutManagerProvider);
+    ref.watch(windowOrchestratorProvider);
 
     final restored = _workspaceStore.read();
     final normalizedRestored = restored != null &&

@@ -16,6 +16,7 @@ import '../../../usage/presentation/providers/usage_provider.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
 import '../../domain/models/client_config_exception.dart';
 import '../../domain/models/groq_runtime_config.dart';
+import '../../../payments/presentation/widgets/premium_section.dart';
 
 String _clientConfigLoadErrorMessage(Object error) {
   if (error is ClientConfigException) {
@@ -639,6 +640,8 @@ class _SettingsDialogState extends ConsumerState<_SettingsDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 12),
+        const PremiumSection(),
+        const SizedBox(height: 20),
         _buildSettingToggle(
           'Always on Top',
           'Keep the assistant visible above other windows',

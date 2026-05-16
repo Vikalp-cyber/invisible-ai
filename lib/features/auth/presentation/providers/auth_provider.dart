@@ -8,6 +8,7 @@ import '../../domain/models/auth_session.dart';
 import '../../domain/models/auth_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../../../core/providers/common_providers.dart';
+import '../../../payments/presentation/providers/payment_flow_provider.dart';
 
 enum AuthStatus {
   initial,
@@ -50,12 +51,13 @@ class AuthState {
 }
 
 class AuthNotifier extends Notifier<AuthState> {
-  late final AuthRepository _authRepository;
   StreamSubscription<AuthSession?>? _sessionSubscription;
+
+  AuthRepository get _authRepository => ref.read(authRepositoryProvider);
 
   @override
   AuthState build() {
-    _authRepository = ref.watch(authRepositoryProvider);
+    ref.watch(authRepositoryProvider);
     final tokenStorage = ref.watch(tokenStorageProvider);
     _sessionSubscription ??= tokenStorage.sessionChanges.listen(_syncSession);
     ref.onDispose(() => _sessionSubscription?.cancel());
@@ -88,7 +90,8 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final session = await _authRepository.signInWithGoogle();
       state = state.copyWith(status: AuthStatus.authenticated, session: session);
-      
+      await _onAccountSignedIn();
+
       // Auto-focus the app window on successful login.
       unawaited(ref.read(windowServiceProvider).bringToFront());
     } catch (e) {
@@ -123,10 +126,16 @@ class AuthNotifier extends Notifier<AuthState> {
         ),
       ),
     );
+    unawaited(_onAccountSignedIn());
   }
 
   Future<void> logout() async {
-    state = state.copyWith(status: AuthStatus.unauthenticated, clearError: true, clearSession: true);
+    await _clearAccountScopedState();
+    state = state.copyWith(
+      status: AuthStatus.unauthenticated,
+      clearError: true,
+      clearSession: true,
+    );
     try {
       await _authRepository.logout();
     } catch (e) {
@@ -143,12 +152,34 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   void _syncSession(AuthSession? session) {
+    final previousUserId = state.session?.user.id;
+    final nextUserId = session?.user.id;
+
     state = state.copyWith(
       status: session != null ? AuthStatus.authenticated : AuthStatus.unauthenticated,
       session: session,
       clearSession: session == null,
       clearError: session != null,
     );
+
+    if (session == null) {
+      unawaited(_clearAccountScopedState());
+    } else if (previousUserId != nextUserId) {
+      unawaited(_onAccountSignedIn());
+    }
+  }
+
+  Future<void> _onAccountSignedIn() async {
+    ref.read(paymentFlowProvider.notifier).reset();
+    // Do not invalidate [subscriptionStatusProvider] here — it watches [authProvider]
+    // and would cause a CircularDependencyError. User id change triggers a refetch.
+    await ref.read(paymentServiceProvider).syncPremiumFromServer();
+  }
+
+  Future<void> _clearAccountScopedState() async {
+    await ref.read(paymentServiceProvider).clearPremiumCache();
+    ref.read(paymentFlowProvider.notifier).reset();
+    // Subscription provider returns null when [isAuthenticated] is false (no invalidate).
   }
 
   String _toMessage(Object error) {

@@ -17,19 +17,46 @@ final clientConfigRepositoryProvider = Provider<ClientConfigRepository>((ref) {
 });
 
 /// Loads Groq + optional Deepgram after sign-in. Keys stay in memory only.
-final clientRuntimeConfigProvider =
-    FutureProvider.autoDispose<ClientRuntimeConfig?>((ref) async {
-  final authed = ref.watch(authProvider.select((a) => a.isAuthenticated));
-  if (!authed) {
-    return null;
+///
+/// Does not auto-retry on failure (e.g. HTTP 503 MISSING_GROQ_KEYS) — call
+/// [ClientRuntimeConfigNotifier.refresh] or invalidate after backend fixes keys.
+class ClientRuntimeConfigNotifier extends AsyncNotifier<ClientRuntimeConfig?> {
+  @override
+  Future<ClientRuntimeConfig?> build() async {
+    ref.keepAlive();
+
+    final authed = ref.watch(authProvider.select((a) => a.isAuthenticated));
+    if (!authed) {
+      return null;
+    }
+
+    final repo = ref.read(clientConfigRepositoryProvider);
+    return repo.fetchClientRuntimeConfig();
   }
-  final repo = ref.read(clientConfigRepositoryProvider);
-  return repo.fetchClientRuntimeConfig();
-});
+
+  Future<void> refresh() async {
+    final authed = ref.read(authProvider).isAuthenticated;
+    if (!authed) {
+      state = const AsyncData(null);
+      return;
+    }
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      return ref.read(clientConfigRepositoryProvider).fetchClientRuntimeConfig();
+    });
+  }
+}
+
+final clientRuntimeConfigProvider =
+    AsyncNotifierProvider<ClientRuntimeConfigNotifier, ClientRuntimeConfig?>(
+  ClientRuntimeConfigNotifier.new,
+);
 
 /// Groq slice of [clientRuntimeConfigProvider] (settings UI, etc.).
-final groqClientConfigProvider =
-    FutureProvider.autoDispose<GroqRuntimeConfig?>((ref) async {
-  final full = await ref.watch(clientRuntimeConfigProvider.future);
-  return full?.groq;
+final groqClientConfigProvider = Provider<AsyncValue<GroqRuntimeConfig?>>((ref) {
+  return ref.watch(clientRuntimeConfigProvider).when(
+        data: (config) => AsyncData(config?.groq),
+        loading: () => const AsyncLoading(),
+        error: AsyncError.new,
+      );
 });
