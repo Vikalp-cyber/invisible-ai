@@ -13,6 +13,8 @@ import 'services/secure_storage_service.dart';
 import 'services/hotkey_service.dart';
 import 'services/tray_service.dart';
 import 'services/overlay_protection_manager.dart';
+import 'features/assistant/data/providers/groq_config_providers.dart';
+import 'features/assistant/data/providers/cursor_config_providers.dart';
 import 'features/assistant/presentation/providers/assistant_provider.dart';
 import 'core/providers/common_providers.dart';
 import 'features/overlay/presentation/providers/overlay_provider.dart';
@@ -63,6 +65,7 @@ void main() async {
   await preferenceService.init();
 
   final secureStorageService = SecureStorageService();
+  await secureStorageService.init();
 
   // ── Initialize Window Manager ───────────────────────────────────────────
   await windowManager.ensureInitialized();
@@ -114,6 +117,10 @@ void main() async {
 
   // Initialize overlay orchestration/layout engine before first frame.
   await container.read(overlayProvider.notifier).initializeSmartLayout();
+
+  // Load persisted API keys before UI / copilot so chat + STT see them immediately.
+  await container.read(localGroqKeysProvider.future);
+  await container.read(localCursorKeysProvider.future);
 
   // ── Initialize Hotkey Service ───────────────────────────────────────────
   // Register global keyboard shortcuts that work even when the app is

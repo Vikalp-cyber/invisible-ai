@@ -8,6 +8,7 @@ enum AIProviderType {
   anthropic,
   ollama,
   groq,
+  cursor,
 }
 
 extension AIProviderTypeX on AIProviderType {
@@ -23,6 +24,8 @@ extension AIProviderTypeX on AIProviderType {
         return 'Local Ollama';
       case AIProviderType.groq:
         return 'Groq LPU';
+      case AIProviderType.cursor:
+        return 'Cursor';
     }
   }
 }

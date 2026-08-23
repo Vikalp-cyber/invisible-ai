@@ -125,7 +125,7 @@ class PaymentFlowNotifier extends Notifier<PaymentFlowState> {
   Future<void> _onPremiumConfirmed(String? serverMessage) async {
     await ref.read(usageProvider.notifier).refreshUsage();
     await ref.read(authProvider.notifier).refreshSession();
-    await ref.read(clientRuntimeConfigProvider.notifier).refresh();
+    await ref.read(localGroqKeysProvider.notifier).refresh();
 
     // Defer invalidate — [subscriptionStatusProvider] depends on [authProvider].
     Future.microtask(() {

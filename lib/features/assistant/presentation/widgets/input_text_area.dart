@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../settings/presentation/providers/resume_provider.dart';
 import '../providers/assistant_provider.dart';
 
 /// ── Input Text Area ────────────────────────────────────────────────────────
@@ -101,6 +102,12 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
       },
     );
 
+    final resumeLoaded = ref.watch(
+      resumeProfileProvider.select(
+        (async) => async.asData?.value.hasText ?? false,
+      ),
+    );
+
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppConstants.horizontalPadding,
@@ -112,7 +119,44 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
           top: BorderSide(color: AppColors.glassBorder, width: 0.5),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (resumeLoaded)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.description_outlined,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Resume loaded',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // ── Text Input Field & Image Preview ──────────────────────────────
@@ -178,6 +222,7 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
                       maxLines: 4,
                       minLines: 1,
                       enabled: !isTyping,
+                      mouseCursor: SystemMouseCursors.basic,
                       onChanged: (_) => setState(() {}), // Trigger rebuild for focus/text state
                       textInputAction: TextInputAction.newline,
                       style: Theme.of(
@@ -226,6 +271,8 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
           ),
         ],
       ),
+        ],
+      ),
     );
   }
 
@@ -236,7 +283,7 @@ class _InputTextAreaState extends ConsumerState<InputTextArea> {
     final isActive = _hasText || hasImage || isTyping;
 
     return MouseRegion(
-      cursor: isActive ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor: SystemMouseCursors.basic,
       child: GestureDetector(
         onTap: () {
           if (isTyping) {

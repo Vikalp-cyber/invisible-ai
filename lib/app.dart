@@ -4,19 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/constants/app_strings.dart';
 import 'core/theme/app_theme.dart';
 import 'features/assistant/presentation/screens/assistant_screen.dart';
-import 'features/auth/presentation/providers/auth_provider.dart';
-import 'features/auth/presentation/screens/sign_in_screen.dart';
 
 /// ── Flowdesk app root ───────────────────────────────────────────────────────
 /// Root MaterialApp with dark futuristic theme and transparent background.
 /// No debug banner. Home screen is the floating assistant overlay.
+/// Local-only mode: no Google sign-in / backend auth gate.
 class FlowdeskApp extends ConsumerWidget {
   const FlowdeskApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-
     return MaterialApp(
       // ── App Identity ─────────────────────────────────────────────────────
       title: AppStrings.appTitle,
@@ -28,20 +25,7 @@ class FlowdeskApp extends ConsumerWidget {
       themeMode: ThemeMode.dark,
 
       // ── Home Screen ──────────────────────────────────────────────────────
-      home: authState.isBootstrapping
-          ? const _AuthBootstrapLoader()
-          : (authState.isAuthenticated
-                ? const AssistantScreen()
-                : const SignInScreen()),
+      home: const AssistantScreen(),
     );
-  }
-}
-
-class _AuthBootstrapLoader extends StatelessWidget {
-  const _AuthBootstrapLoader();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

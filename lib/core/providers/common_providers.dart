@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'deepgram_runtime_provider.dart';
 import '../../../services/preference_service.dart';
 import '../../../services/secure_storage_service.dart';
 import '../../../services/window_service.dart';
@@ -10,6 +9,7 @@ import '../../../services/virtual_audio_cable_service.dart';
 import '../../../services/interview_audio_copilot_service.dart';
 import '../../../services/payment_service.dart';
 import '../../../services/screen_capture_service.dart';
+import '../../features/assistant/data/providers/groq_config_providers.dart';
 import '../../features/auth/data/providers/auth_data_providers.dart';
 import '../../features/payments/data/providers/payment_providers.dart';
 
@@ -49,6 +49,13 @@ final interviewAudioCopilotServiceProvider = Provider<InterviewAudioCopilotServi
     resolveDeepgramHolder: () => ref.read(deepgramRuntimeHolderProvider),
     resolveDeepgramListenBaseUrl: () =>
         ref.read(deepgramRuntimeHolderProvider).listenBaseUrl,
+    resolveGroqApiKeys: () {
+      final keysAsync = ref.read(localGroqKeysProvider);
+      return keysAsync.maybeWhen(
+        data: (keys) => keys,
+        orElse: () => const <String>[],
+      );
+    },
   );
   ref.onDispose(() {
     service.dispose();

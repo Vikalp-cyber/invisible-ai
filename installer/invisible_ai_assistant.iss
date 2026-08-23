@@ -1,22 +1,26 @@
-; Flowdesk — production installer
+; Flowdesk — Windows installer (Inno Setup 6)
 ;
-; Version is supplied at compile time (required for release builds):
-;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\invisible_ai_assistant.iss /DMyAppVersion=1.2.3
+; Prerequisites:
+;   1. flutter build windows --release
+;   2. Inno Setup 6: https://jrsoftware.org/isinfo.php
 ;
-; GitHub Actions: strip a leading "v" from the tag and pass the same /D switch.
+; Build locally:
+;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\invisible_ai_assistant.iss /DMyAppVersion=1.0.1
+;
+; Or run:  .\scripts\create_installer.ps1
+;
+; Output: dist\invisible_ai_assistant_setup_<version>.exe
 
 #define MyAppName "Flowdesk"
 #define MyAppExeName "invisible_ai_assistant.exe"
-#define MyAppPublisher "Flowdesk"
+#define MyAppPublisher "LuminoAI"
 #define MyAppURL "https://github.com/LuminoAi/invisible-ai"
 
-; Default for local compiles only — release builds must pass /DMyAppVersion=x.y.z
 #ifndef MyAppVersion
-#define MyAppVersion "0.0.0-dev"
+#define MyAppVersion "1.0.1"
 #endif
 
-; Fixed forever: Windows uses this with uninstall entries and in-place upgrades.
-; Do not change after the first public release.
+; Fixed AppId — do not change after first public release (enables in-place upgrades).
 #define MyAppId "{{2A4B2D5C-946E-4A6F-9B94-29A76A8D58D1}"
 
 [Setup]
@@ -33,18 +37,17 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 
-; First install: show directory. Upgrades: reuse prior path (same AppId) without manual uninstall.
 DisableDirPage=auto
 UsePreviousAppDir=yes
 UsePreviousTasks=yes
 UsePreviousLanguage=yes
 
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=..\assets\app_icon.ico
 
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
-; Output relative to this .iss (installer\ → repo root\dist\)
 OutputDir=..\dist
 OutputBaseFilename=invisible_ai_assistant_setup_{#MyAppVersion}
 
@@ -55,8 +58,6 @@ PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 
 SetupLogging=yes
-
-; Close running instances during upgrade, then restart them when possible (Restart Manager).
 CloseApplications=yes
 RestartApplications=yes
 
@@ -73,7 +74,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Full Flutter Windows release payload (exe, DLLs, data/, flutter_assets/, etc.)
+; Flutter Windows release output (exe, DLLs, data/, flutter_assets/, etc.)
 Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "*.pdb,*.lib,*.exp,*.ilk,*.iobj,*.ipdb,*.obj"
 
 [Icons]

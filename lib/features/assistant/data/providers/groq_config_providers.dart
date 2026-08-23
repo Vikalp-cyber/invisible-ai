@@ -1,62 +1,80 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/network/dio_provider.dart';
-import '../../../auth/data/providers/auth_data_providers.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../domain/models/client_runtime_config.dart';
+import '../../../../core/providers/common_providers.dart';
 import '../../domain/models/groq_runtime_config.dart';
-import '../groq_config_repository.dart';
+import '../../../../services/secure_storage_service.dart';
 
 export '../../../../core/providers/deepgram_runtime_provider.dart';
 
-final clientConfigRepositoryProvider = Provider<ClientConfigRepository>((ref) {
-  return ClientConfigRepository(
-    ref.watch(dioProvider),
-    ref.watch(desktopOAuthConfigProvider),
-  );
-});
-
-/// Loads Groq + optional Deepgram after sign-in. Keys stay in memory only.
+/// Local Groq API keys loaded from [SecureStorageService] (no backend).
 ///
-/// Does not auto-retry on failure (e.g. HTTP 503 MISSING_GROQ_KEYS) — call
-/// [ClientRuntimeConfigNotifier.refresh] or invalidate after backend fixes keys.
-class ClientRuntimeConfigNotifier extends AsyncNotifier<ClientRuntimeConfig?> {
+/// Order is the fallback rotation order used by [AIRepository].
+class LocalGroqKeysNotifier extends AsyncNotifier<List<String>> {
+  SecureStorageService get _storage => ref.read(secureStorageServiceProvider);
+
   @override
-  Future<ClientRuntimeConfig?> build() async {
+  Future<List<String>> build() async {
     ref.keepAlive();
-
-    final authed = ref.watch(authProvider.select((a) => a.isAuthenticated));
-    if (!authed) {
-      return null;
-    }
-
-    final repo = ref.read(clientConfigRepositoryProvider);
-    return repo.fetchClientRuntimeConfig();
+    return _storage.getGroqApiKeys();
   }
 
   Future<void> refresh() async {
-    final authed = ref.read(authProvider).isAuthenticated;
-    if (!authed) {
-      state = const AsyncData(null);
-      return;
-    }
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      return ref.read(clientConfigRepositoryProvider).fetchClientRuntimeConfig();
-    });
+    state = await AsyncValue.guard(_storage.getGroqApiKeys);
+  }
+
+  Future<void> setKeys(List<String> keys) async {
+    await _storage.saveGroqApiKeys(keys);
+    state = AsyncData(await _storage.getGroqApiKeys());
+  }
+
+  Future<void> addKey(String apiKey) async {
+    final next = await _storage.addGroqApiKey(apiKey);
+    state = AsyncData(next);
+  }
+
+  Future<void> removeAt(int index) async {
+    final next = await _storage.removeGroqApiKeyAt(index);
+    state = AsyncData(next);
   }
 }
 
-final clientRuntimeConfigProvider =
-    AsyncNotifierProvider<ClientRuntimeConfigNotifier, ClientRuntimeConfig?>(
-  ClientRuntimeConfigNotifier.new,
+final localGroqKeysProvider =
+    AsyncNotifierProvider<LocalGroqKeysNotifier, List<String>>(
+  LocalGroqKeysNotifier.new,
 );
 
-/// Groq slice of [clientRuntimeConfigProvider] (settings UI, etc.).
-final groqClientConfigProvider = Provider<AsyncValue<GroqRuntimeConfig?>>((ref) {
-  return ref.watch(clientRuntimeConfigProvider).when(
-        data: (config) => AsyncData(config?.groq),
-        loading: () => const AsyncLoading(),
-        error: AsyncError.new,
-      );
-});
+/// Runtime config built from locally stored Groq keys.
+final localGroqRuntimeConfigProvider = Provider<AsyncValue<GroqRuntimeConfig?>>(
+  (ref) {
+    return ref.watch(localGroqKeysProvider).when(
+          data: (keys) {
+            if (keys.isEmpty) {
+              return const AsyncData(null);
+            }
+            return AsyncData(
+              GroqRuntimeConfig(
+                apiKeys: keys,
+                models: const [
+                  GroqModelOption(
+                    id: GroqModelIds.defaultChat,
+                    label: 'GPT-OSS 120B',
+                  ),
+                  GroqModelOption(
+                    id: 'openai/gpt-oss-20b',
+                    label: 'GPT-OSS 20B',
+                  ),
+                ],
+                defaultModel: GroqModelIds.defaultChat,
+                chatModel: GroqModelIds.defaultChat,
+              ),
+            );
+          },
+          loading: () => const AsyncLoading(),
+          error: AsyncError.new,
+        );
+  },
+);
+
+/// Backward-compatible alias used by payment/settings code paths.
+final groqClientConfigProvider = localGroqRuntimeConfigProvider;

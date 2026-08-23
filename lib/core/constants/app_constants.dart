@@ -79,6 +79,21 @@ class AppConstants {
   /// Persisted Groq model id only (never the API key).
   static const String keyGroqModelId = 'groq_model_id';
 
+  /// Ordered list of local Groq API keys (fallback rotation order).
+  static const String keyGroqApiKeys = 'groq_api_keys';
+
+  /// Ordered list of local Cursor API keys (fallback rotation order).
+  static const String keyCursorApiKeys = 'cursor_api_keys';
+
+  /// Extracted resume / profile text used for interview answers.
+  static const String keyResumeText = 'resume_text';
+
+  /// Display name of the last imported resume file (optional).
+  static const String keyResumeFileName = 'resume_file_name';
+
+  /// Max characters stored/injected for resume context.
+  static const int maxResumeChars = 14000;
+
   /// Premium unlocked after successful Razorpay verification (local hint only).
   static const String keyPremiumActive = 'premium_active';
 

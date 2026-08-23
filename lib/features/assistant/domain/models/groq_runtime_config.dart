@@ -2,12 +2,16 @@
 abstract final class GroqModelIds {
   GroqModelIds._();
 
-  /// Default when the client has no model id (matches Groq guidance for Llama 3.3 70B).
-  static const String defaultChat = 'llama-3.3-70b-versatile';
+  /// Default when the client has no model id (Groq production chat model).
+  /// Llama 3.3 70B was shut down for free/developer tiers on 2026-08-16.
+  static const String defaultChat = 'openai/gpt-oss-120b';
 
   static const Map<String, String> _deprecated = {
+    'llama-3.3-70b-versatile': defaultChat,
     'llama-3.1-70b-versatile': defaultChat,
+    'llama-3.1-8b-instant': 'openai/gpt-oss-20b',
     'llama3-70b-8192': defaultChat,
+    'llama3-8b-8192': 'openai/gpt-oss-20b',
   };
 
   /// Returns `null` when [id] is null or blank after trim.

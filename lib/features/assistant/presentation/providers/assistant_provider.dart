@@ -10,14 +10,14 @@ import '../../../../core/providers/common_providers.dart';
 import '../../domain/repositories/ai_provider_interface.dart';
 import '../../data/ai_repository_impl.dart';
 import '../../data/providers/groq_config_providers.dart'
-    show clientRuntimeConfigProvider, deepgramRuntimeHolderProvider;
-import '../../../auth/presentation/providers/auth_provider.dart';
+    show localGroqRuntimeConfigProvider;
+import '../../data/providers/cursor_config_providers.dart'
+    show localCursorRuntimeConfigProvider;
+import '../../../settings/presentation/providers/resume_provider.dart';
 import '../../domain/models/chat_message.dart';
 import '../../domain/models/audio_input_device.dart';
 import '../../../../services/screen_capture_service.dart';
 import '../../../../core/constants/app_strings.dart';
-import '../../../usage/presentation/providers/usage_provider.dart';
-import '../../../usage/domain/models/usage_exception.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── State Class ─────────────────────────────────────────────────────────────
@@ -78,6 +78,12 @@ class AssistantState {
     }
     if (p.isEmpty) {
       return f;
+    }
+    if (p == f || f.endsWith(p)) {
+      return f;
+    }
+    if (p.startsWith(f)) {
+      return p;
     }
     return '$f $p';
   }
@@ -166,7 +172,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   /// Stable id for the in-chat live transcript bubble while copilot is running.
   static const String kLiveListenMessageId = 'live-listen-draft';
 
-  // Must not be `late final`: [build] runs again when e.g. [clientRuntimeConfigProvider] resolves.
+  // Must not be `late final`: [build] runs again when e.g. local Groq keys resolve.
   late WindowService _windowService;
   late AIRepository _aiRepository;
   late ScreenCaptureService _screenCaptureService;
@@ -184,24 +190,31 @@ class AssistantNotifier extends Notifier<AssistantState> {
       interviewAudioCopilotServiceProvider,
     );
 
-    ref.listen(authProvider, (prev, next) {
-      if (!next.isAuthenticated) {
-        _aiRepository.clearGroqRuntimeConfig();
-        ref.read(deepgramRuntimeHolderProvider).clear();
-        ref.invalidate(clientRuntimeConfigProvider);
-      }
-    });
-
-    ref.listen(clientRuntimeConfigProvider, (prev, next) {
+    ref.listen(localGroqRuntimeConfigProvider, (prev, next) {
       next.whenData((config) {
         if (config != null) {
-          _aiRepository.applyGroqRuntimeConfig(config.groq);
-          ref.read(deepgramRuntimeHolderProvider).apply(config.deepgram);
+          _aiRepository.applyGroqRuntimeConfig(config);
+        } else {
+          _aiRepository.clearGroqRuntimeConfig();
         }
       });
-    });
+    }, fireImmediately: true);
 
-    ref.watch(clientRuntimeConfigProvider);
+    ref.listen(localCursorRuntimeConfigProvider, (prev, next) {
+      next.whenData((config) {
+        if (config != null) {
+          _aiRepository.applyCursorRuntimeConfig(config);
+        } else {
+          _aiRepository.clearCursorRuntimeConfig();
+        }
+      });
+    }, fireImmediately: true);
+
+    ref.listen(resumeProfileProvider, (prev, next) {
+      next.whenData((profile) {
+        _aiRepository.setResumeText(profile.text);
+      });
+    }, fireImmediately: true);
 
     // Wire up visibility change callback from WindowService → state sync.
     _windowService.onVisibilityChanged = () {
@@ -318,19 +331,6 @@ class AssistantNotifier extends Notifier<AssistantState> {
     if (state.isInterviewCopilotActive) {
       return;
     }
-    if (!ref.read(deepgramRuntimeHolderProvider).hasKey) {
-      state = state.copyWith(
-        messages: [
-          ...state.messages,
-          ChatMessage.system(
-            'Speech recognition is unavailable: no Deepgram API keys are '
-            'configured for your account. Ask an administrator to add keys, then '
-            'sign out and back in.',
-          ),
-        ],
-      );
-      return;
-    }
     await refreshAudioInputDevices();
     try {
       await _interviewAudioCopilotService.start(
@@ -365,19 +365,6 @@ class AssistantNotifier extends Notifier<AssistantState> {
   Future<void> toggleSpeakerCopilot() async {
     if (state.isInterviewCopilotActive) {
       await stopInterviewCopilot();
-      return;
-    }
-    if (!ref.read(deepgramRuntimeHolderProvider).hasKey) {
-      state = state.copyWith(
-        messages: [
-          ...state.messages,
-          ChatMessage.system(
-            'Speech recognition is unavailable: no Deepgram API keys are '
-            'configured for your account. Ask an administrator to add keys, then '
-            'sign out and back in.',
-          ),
-        ],
-      );
       return;
     }
     try {
@@ -428,23 +415,6 @@ class AssistantNotifier extends Notifier<AssistantState> {
     );
   }
 
-  String _composeListenDraft(String finalized, String partial) {
-    final f = finalized.trim();
-    final p = partial.trim();
-    if (f.isEmpty && p.isEmpty) {
-      return '';
-    }
-    if (f.isEmpty) {
-      return p;
-    }
-    if (p.isEmpty) {
-      return f;
-    }
-    return '$f $p';
-  }
-
-
-
   void _applyListenTranscript({String? finalized, String? partial}) {
     final newF = finalized ?? state.listenFinalizedText;
     final newP = partial ?? state.listenPartialText;
@@ -455,7 +425,24 @@ class AssistantNotifier extends Notifier<AssistantState> {
   }
 
   void _onPartialTranscript(String partial) {
-    _applyListenTranscript(partial: partial);
+    final trimmed = partial.trim();
+    if (trimmed.isEmpty) {
+      _applyListenTranscript(partial: '');
+      return;
+    }
+    final finalized = state.listenFinalizedText.trim();
+    if (finalized.isNotEmpty) {
+      if (trimmed == finalized || finalized.endsWith(trimmed)) {
+        _applyListenTranscript(partial: '');
+        return;
+      }
+      if (trimmed.startsWith(finalized)) {
+        final suffix = trimmed.substring(finalized.length).trim();
+        _applyListenTranscript(partial: suffix);
+        return;
+      }
+    }
+    _applyListenTranscript(partial: trimmed);
   }
 
   void _onFinalTranscript(String finalText) {
@@ -464,8 +451,46 @@ class AssistantNotifier extends Notifier<AssistantState> {
       return;
     }
     final prev = state.listenFinalizedText.trim();
-    final newF = prev.isEmpty ? trimmed : '$prev $trimmed';
-    _applyListenTranscript(finalized: newF, partial: '');
+    if (prev.isEmpty) {
+      _applyListenTranscript(finalized: trimmed, partial: '');
+      return;
+    }
+    if (trimmed == prev || prev.endsWith(trimmed)) {
+      _applyListenTranscript(partial: '');
+      return;
+    }
+    final merged = _mergeListenTranscript(prev, trimmed);
+    _applyListenTranscript(finalized: merged, partial: '');
+  }
+
+  /// Appends [next] to [prev], trimming overlap from rolling Whisper chunks.
+  String _mergeListenTranscript(String prev, String next) {
+    if (next.startsWith(prev)) {
+      return next;
+    }
+    if (prev.endsWith(next) || prev.toLowerCase() == next.toLowerCase()) {
+      return prev;
+    }
+
+    final prevWords = prev.split(RegExp(r'\s+'));
+    final nextWords = next.split(RegExp(r'\s+'));
+    var overlapWords = 0;
+    for (var i = 1; i <= prevWords.length && i <= nextWords.length; i++) {
+      final tail = prevWords.sublist(prevWords.length - i).join(' ').toLowerCase();
+      final head = nextWords.sublist(0, i).join(' ').toLowerCase();
+      if (tail == head) {
+        overlapWords = i;
+      }
+    }
+    if (overlapWords > 0) {
+      final suffix = nextWords.sublist(overlapWords).join(' ').trim();
+      if (suffix.isEmpty) {
+        return prev;
+      }
+      return '$prev $suffix'.trim();
+    }
+
+    return '$prev $next'.trim();
   }
 
   Future<void> _onQuestionDetected(question) async {
@@ -509,38 +534,6 @@ class AssistantNotifier extends Notifier<AssistantState> {
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty && state.selectedImage == null) return;
     if (state.isTyping) return;
-
-    final isLocalProvider =
-        _aiRepository.currentProviderType == AIProviderType.ollama;
-
-    // --- Token Usage Pre-check ---
-    if (!isLocalProvider) {
-      final usageState = ref.read(usageProvider);
-
-      final isUsageInactive =
-          usageState.usage != null &&
-          (!usageState.usage!.isActive ||
-              usageState.usage!.tokensRemaining <= 0);
-
-      final hasLimitError =
-          usageState.error != null &&
-          (usageState.error!.contains('inactive') ||
-              usageState.error!.contains('limit'));
-
-      if (isUsageInactive || hasLimitError) {
-        state = state.copyWith(
-          messages: [
-            ...state.messages,
-            ChatMessage.assistant(
-              usageState.error ??
-                  'Token limit exceeded. Please upgrade to continue.',
-              isError: true,
-            ),
-          ],
-        );
-        return;
-      }
-    }
 
     final userMessage = ChatMessage.user(
       text.trim(),
@@ -608,87 +601,21 @@ class AssistantNotifier extends Notifier<AssistantState> {
         );
       }
 
-      // 4. Stream finished — gate the response behind usage/consume.
+      // 4. Stream finished — show response (local-only: no usage/consume gate).
       if (state.messages.any((m) => m.id == assistantMessageId)) {
         currentAssistantMessage = currentAssistantMessage.copyWith(
           isStreaming: false,
         );
 
-        final isLocalProvider =
-            _aiRepository.currentProviderType == AIProviderType.ollama;
-
-        if (!isLocalProvider) {
-          // Determine token count: use AI metadata if available,
-          // otherwise estimate (~1 token per 4 characters).
-          final int tokensToConsume;
-          if (currentAssistantMessage.usage != null &&
-              currentAssistantMessage.usage!.totalTokens > 0) {
-            tokensToConsume = currentAssistantMessage.usage!.totalTokens;
-          } else {
-            tokensToConsume = (currentAssistantMessage.content.length / 4)
-                .ceil()
-                .clamp(1, 999999);
-          }
-
-          try {
-            // Call POST /api/usage/consume — this is the gatekeeper.
-            await ref
-                .read(usageProvider.notifier)
-                .consumeTokens(
-                  tokensToConsume,
-                  reason: '${_aiRepository.currentProviderType.name} chat',
-                );
-
-            // ✅ Consume succeeded (200) — show the response.
-            state = state.copyWith(
-              messages: state.messages
-                  .map(
-                    (m) => m.id == assistantMessageId
-                        ? currentAssistantMessage
-                        : m,
-                  )
-                  .toList(),
-              isTyping: false,
-            );
-          } on UsageException catch (e) {
-            // ❌ 403 — token limit exceeded or account inactive.
-            // Compulsorily REMOVE the AI response so the user cannot read it.
-            final messagesWithoutResponse = state.messages
-                .where((m) => m.id != assistantMessageId)
-                .toList();
-
-            state = state.copyWith(
-              messages: [
-                ...messagesWithoutResponse,
-                ChatMessage.assistant(e.message, isError: true),
-              ],
-              isTyping: false,
-            );
-          } catch (_) {
-            // Network or other errors — still show the response but log it.
-            state = state.copyWith(
-              messages: state.messages
-                  .map(
-                    (m) => m.id == assistantMessageId
-                        ? currentAssistantMessage
-                        : m,
-                  )
-                  .toList(),
-              isTyping: false,
-            );
-          }
-        } else {
-          // Local provider (Ollama) — no consume needed, show directly.
-          state = state.copyWith(
-            messages: state.messages
-                .map(
-                  (m) =>
-                      m.id == assistantMessageId ? currentAssistantMessage : m,
-                )
-                .toList(),
-            isTyping: false,
-          );
-        }
+        state = state.copyWith(
+          messages: state.messages
+              .map(
+                (m) =>
+                    m.id == assistantMessageId ? currentAssistantMessage : m,
+              )
+              .toList(),
+          isTyping: false,
+        );
       }
     } catch (e) {
       debugPrint('AssistantNotifier: AI response error: $e');
@@ -767,6 +694,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   /// ── Clear Chat ────────────────────────────────────────────────────────────
   /// Resets the conversation to the initial welcome message.
   void clearChat() {
+    _aiRepository.resetCursorChatSession();
     state = state.copyWith(
       messages: [ChatMessage.assistant(AppStrings.welcomeMessage)],
       isTyping: false,

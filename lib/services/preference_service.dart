@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/constants/app_constants.dart';
+
 /// ── Preference Service ─────────────────────────────────────────────────────
 /// Thin typed wrapper over SharedPreferences for window state persistence.
 /// All preference keys are defined in [AppConstants].
@@ -52,5 +54,40 @@ class PreferenceService {
   /// Checks if a key exists in preferences.
   bool containsKey(String key) {
     return _prefs.containsKey(key);
+  }
+
+  // ── Resume profile ───────────────────────────────────────────────────────
+
+  String getResumeText() =>
+      getString(AppConstants.keyResumeText).trim();
+
+  String getResumeFileName() =>
+      getString(AppConstants.keyResumeFileName).trim();
+
+  Future<void> saveResume({
+    required String text,
+    String? fileName,
+  }) async {
+    final capped = _capResumeText(text);
+    await setString(AppConstants.keyResumeText, capped);
+    final name = fileName?.trim() ?? '';
+    if (name.isEmpty) {
+      await remove(AppConstants.keyResumeFileName);
+    } else {
+      await setString(AppConstants.keyResumeFileName, name);
+    }
+  }
+
+  Future<void> clearResume() async {
+    await remove(AppConstants.keyResumeText);
+    await remove(AppConstants.keyResumeFileName);
+  }
+
+  String _capResumeText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.length <= AppConstants.maxResumeChars) {
+      return trimmed;
+    }
+    return trimmed.substring(0, AppConstants.maxResumeChars);
   }
 }
